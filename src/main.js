@@ -257,7 +257,13 @@ function frame(now) {
       if (In.hitAny()) { Sound.init(); startRun(); }
       break;
     case 'PLAY': {
-      if (In.hit('pause')) { G.state = 'PAUSED'; Sound.pauseMusic(); show(`<h1>PAUSED<small>TAKE YOUR TIME</small></h1>${KEYCARD}<p class="go">press P to keep going</p>`); break; }
+      if (In.hit('pause')) {
+        G.state = 'PAUSED'; Sound.pauseMusic();
+        show(`<h1>PAUSED<small>TAKE YOUR TIME</small></h1>${KEYCARD}
+          <p class="go">press P to keep going</p>
+          <p class="lead">…or press ↓ to go back to the game menu</p>`);
+        break;
+      }
       if (In.hit('restart')) { respawn(); break; }
       const hit = player.update(dt, world.solids, LEVELS[G.level].camYaw || 0);
       player.riding = hit.grounded ? hit.ground : null;
@@ -267,6 +273,8 @@ function frame(now) {
     }
     case 'PAUSED':
       if (In.hit('pause')) { G.state = 'PLAY'; hideOverlay(); Sound.resumeMusic(); }
+      // ↓ while paused = leave, same as game 1's "quit to the level map".
+      else if (In.hit('down')) location.href = $('quit').href;
       break;
     case 'DYING':
       if ((G.timer -= dt) <= 0) G.lives > 0 ? respawn() : gameOver();
