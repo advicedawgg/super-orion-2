@@ -111,8 +111,15 @@ export class World {
       const bodyH = s.h - CAP;
       const body = new THREE.Mesh(tiledBox(s.w, bodyH, s.d, 4), side);
       body.position.y = -CAP - bodyH / 2;
-      const cap = new THREE.Mesh(tiledBox(s.w + LIP, CAP, s.d + LIP, 4), top);
-      cap.position.y = -CAP / 2;
+
+      // Only overhang on sides with nothing next to them. Two platforms that
+      // abut — which is how levels avoid leaving a crack you fall through —
+      // would otherwise overlap by a full lip with coplanar top faces, and
+      // z-fight along the join.
+      const o = this.freeSides(s);
+      const cw = s.w + o.xm + o.xp, cd = s.d + o.zm + o.zp;
+      const cap = new THREE.Mesh(tiledBox(cw, CAP, cd, 4), top);
+      cap.position.set((o.xp - o.xm) / 2, -CAP / 2, (o.zp - o.zm) / 2);
       g.add(body, cap);
     } else {
       // BoxGeometry groups are +X,-X,+Y,-Y,+Z,-Z — top face only gets `top`.
@@ -123,6 +130,29 @@ export class World {
     g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     s.mesh = g; this.group.add(g);
     return g;
+  }
+
+  /** How far the turf cap may overhang on each side: 0 where a neighbour sits
+   *  at the same height, LIP/2 where the edge is open air. */
+  freeSides(s) {
+    const L = LIP / 2;
+    const out = { xm: L, xp: L, zm: L, zp: L };
+    const b = { x0: s.x - s.w / 2, x1: s.x + s.w / 2, z0: s.z - s.d / 2, z1: s.z + s.d / 2 };
+    for (const o of this.solids) {
+      if (o === s || o.crate || o.scenery || Math.abs(o.y - s.y) > 0.02) continue;
+      const c = { x0: o.x - o.w / 2, x1: o.x + o.w / 2, z0: o.z - o.d / 2, z1: o.z + o.d / 2 };
+      const zOver = Math.min(b.z1, c.z1) - Math.max(b.z0, c.z0) > 0.05;
+      const xOver = Math.min(b.x1, c.x1) - Math.max(b.x0, c.x0) > 0.05;
+      if (zOver) {
+        if (c.x0 - b.x1 < LIP && c.x0 >= b.x1 - 0.05) out.xp = 0;
+        if (b.x0 - c.x1 < LIP && c.x1 <= b.x0 + 0.05) out.xm = 0;
+      }
+      if (xOver) {
+        if (c.z0 - b.z1 < LIP && c.z0 >= b.z1 - 0.05) out.zp = 0;
+        if (b.z0 - c.z1 < LIP && c.z1 <= b.z0 + 0.05) out.zm = 0;
+      }
+    }
+    return out;
   }
 
   addStar(p) {
