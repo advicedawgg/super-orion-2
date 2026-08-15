@@ -1,7 +1,7 @@
 // Turns a level's plain data (src/builder.js) into meshes, then runs
 // everything that isn't the player: stars, crates, enemies, movers, goal.
 import * as THREE from 'three';
-import { tex, skyTexture } from './art.js';
+import { tex, skyTexture, crateFace } from './art.js';
 import { bounds, T } from './physics.js';
 import { buildLevel, killPlane, CRATE_SIZE } from './builder.js';
 
@@ -169,6 +169,11 @@ export class World {
       new THREE.MeshLambertMaterial({ map: tex('crate'), color: info.tint }));
     m.position.set(c.x, c.y + CRATE_SIZE / 2, c.z);
     m.castShadow = m.receiveShadow = true;
+    // Stencil on all five faces you can see, and a topper for the silhouette.
+    // Children of the crate mesh, so smashing it takes them with it.
+    for (const f of faceDecals(c.kind)) m.add(f);
+    const top = topper(c.kind);
+    if (top) m.add(top);
     this.group.add(m);
     return { s, mesh: m, kind: c.kind, alive: true };
   }
@@ -209,16 +214,20 @@ export class World {
   /** The distant world floor. Deliberately NOT added to solids — pits kill. */
   addGround(g, def) {
     const t = tex(g.tex);
+    // Centred on the level's mid-point, and always long enough to reach both
+    // ends of it — a fixed 420 stops short once a level runs past ~400u, and
+    // the world floor visibly ending mid-level is worse than not having one.
+    const zs = this.solids.map(s => s.z);
+    const z0 = Math.min(...zs), z1 = Math.max(...zs);
+    const size = Math.max(g.size, (z1 - z0) + 200);
     // Tinted down: anything this far below the play space should read as
     // "in shadow, a long way away", not as more of the same floor.
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(g.size, g.size),
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size),
       new THREE.MeshLambertMaterial({ map: t.clone(), color: 0x9fa8a2 }));
-    m.material.map.repeat.set(g.size / 4, g.size / 4);
+    m.material.map.repeat.set(size / 4, size / 4);
     m.material.map.needsUpdate = true;
     m.rotation.x = -Math.PI / 2;
-    // Centred on the level's mid-point so the plane reaches both ends.
-    const zs = this.solids.map(s => s.z);
-    m.position.set(0, g.y, (Math.min(...zs) + Math.max(...zs)) / 2);
+    m.position.set(0, g.y, (z0 + z1) / 2);
     m.receiveShadow = true;
     this.group.add(m);
     this.groundY = g.y;
@@ -343,15 +352,89 @@ const SPLASH = {
 };
 
 /* ---------------------------------------------------------------- crates */
-// TODO (playtest): these differ only by tint, so the bonus crate and the
-// springboard are not distinguishable at a glance. They need distinct faces —
-// a star stencil, a cat, a spring/arrow — and ideally distinct silhouettes.
+// Three cues, deliberately redundant: a tint, a stencil on every face, and a
+// topper you can read from behind or in shadow. Tint alone was the whole
+// difference once, and you could not tell the bonus crate from the bouncy one.
 export const CRATE = {
   plain: { stars: 1, tint: 0xffffff },
   star: { stars: 5, tint: 0xffe9a8 },
   life: { stars: 0, life: 1, tint: 0xa8ffc0 },
   spring: { stars: 0, spring: true, tint: 0xa8d8ff },
 };
+
+/* ---- crate face stencils ---- */
+const F = CRATE_SIZE / 2 + 0.012;      // just proud of the face, no z-fighting
+const decalMat = new Map();
+/** Five stencil planes (4 sides + top) for a crate kind; [] for plain. */
+function faceDecals(kind) {
+  const map = crateFace(kind);
+  if (!map) return [];
+  if (!decalMat.has(kind))
+    decalMat.set(kind, new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false }));
+  const mat = decalMat.get(kind);
+  if (!geoCache.has('#decal'))
+    geoCache.set('#decal', new THREE.PlaneGeometry(CRATE_SIZE * .74, CRATE_SIZE * .74));
+  const geo = geoCache.get('#decal');
+  return [
+    [[0, 0, F], [0, 0, 0]], [[0, 0, -F], [0, Math.PI, 0]],
+    [[F, 0, 0], [0, Math.PI / 2, 0]], [[-F, 0, 0], [0, -Math.PI / 2, 0]],
+    [[0, F, 0], [-Math.PI / 2, 0, 0]],
+  ].map(([p, r]) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(...p); m.rotation.set(...r);
+    return m;
+  });
+}
+
+/* ---- crate toppers ---- */
+// Built once per kind and cloned; clone() shares geometry and material.
+const TOPPER = {
+  // Deliberately NOT spinning, unlike a collectable star: the camera sits
+  // behind you, so a star held face-on always reads, and a spinning one is
+  // edge-on — a gold sliver — for half of every turn.
+  star() {
+    const m = new THREE.Mesh(starGeometry(), new THREE.MeshLambertMaterial({ color: 0xffd23f, emissive: 0x7a5a00 }));
+    m.scale.setScalar(1.4); m.position.y = CRATE_SIZE / 2 + .44;
+    return m;
+  },
+  life() {
+    const g = new THREE.Group(), mat = lam(0x2b2431);
+    for (const s of [-1, 1]) {
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(.24, .46, 4), mat);
+      ear.position.set(s * .44, CRATE_SIZE / 2 + .21, .1);
+      ear.rotation.y = Math.PI / 4; ear.rotation.z = s * .2;
+      g.add(ear);
+    }
+    const tail = new THREE.Mesh(new THREE.TorusGeometry(.3, .07, 5, 9, Math.PI * 1.25), mat);
+    tail.position.set(0, CRATE_SIZE / 2 - .1, -F - .18);
+    tail.rotation.set(0, Math.PI / 2, -.5);
+    g.add(tail);
+    return g;
+  },
+  spring() {
+    const g = new THREE.Group(), coil = lam(0xc9d6e8);
+    for (let i = 0; i < 3; i++) {
+      const t = new THREE.Mesh(new THREE.TorusGeometry(.34 - i * .04, .065, 5, 12), coil);
+      t.position.y = CRATE_SIZE / 2 + .06 + i * .1;
+      t.rotation.x = Math.PI / 2;
+      g.add(t);
+    }
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(.52, .52, .1, 10), lam(0x6fb7e8));
+    plate.position.y = CRATE_SIZE / 2 + .33;
+    g.add(plate);
+    return g;
+  },
+};
+const topperProto = new Map();
+function topper(kind) {
+  if (!TOPPER[kind]) return null;
+  if (!topperProto.has(kind)) {
+    const t = TOPPER[kind]();
+    t.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    topperProto.set(kind, t);
+  }
+  return topperProto.get(kind).clone();
+}
 
 /* --------------------------------------------------------------- enemies */
 const lam = c => new THREE.MeshLambertMaterial({ color: c });
@@ -402,6 +485,60 @@ export const ENEMY = {
     tick(e, dt) {
       e.mesh.rotation.y += dt * .7;
       if (e.range) e.pos.x = e.home.x + Math.sin(e.t * e.speed / e.range * 2) * e.range / 2;
+    },
+  },
+  // Underwater. All sting and no weak spot — this one you swim around.
+  // Floats, so it must also be in FLOATING (src/builder.js) or the checker
+  // fails it for standing in mid-water.
+  jelly: {
+    radius: .85, height: 1.7, stompProof: true, spinProof: true, speed: 1.1, range: 0, bob: 2.2,
+    build() {
+      const g = new THREE.Group();
+      const bell = new THREE.Mesh(
+        new THREE.SphereGeometry(.62, 10, 6, 0, Math.PI * 2, 0, Math.PI * .6),
+        new THREE.MeshLambertMaterial({
+          color: 0xff8ad8, emissive: 0x5a1040, transparent: true, opacity: .82, side: THREE.DoubleSide,
+        }));
+      bell.position.y = 1.05; bell.name = 'bell'; g.add(bell);
+      for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2;
+        const t = new THREE.Mesh(new THREE.CylinderGeometry(.05, .02, .95, 4), lam(0xffc2ec));
+        t.position.set(Math.cos(a) * .33, .55, Math.sin(a) * .33);
+        t.name = 'tent'; g.add(t);
+      }
+      return g;
+    },
+    tick(e) {
+      e.pos.y = e.home.y + Math.sin(e.t * e.speed) * e.bob;
+      const k = Math.sin(e.t * 2.6);
+      for (const c of e.mesh.children) {
+        if (c.name === 'tent') c.rotation.x = k * .28;
+        else if (c.name === 'bell') c.scale.set(1 - k * .1, 1 + k * .18, 1 - k * .1);
+      }
+    },
+  },
+  // Flight levels. Crackles, patrols, and cannot be attacked — fly around it.
+  zapdrone: {
+    radius: .8, height: 1.2, stompProof: true, spinProof: true, speed: 3.2, range: 8, bob: .6,
+    build() {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.OctahedronGeometry(.55, 0), lam(0x8892a6));
+      body.position.y = .6; g.add(body);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(.19, 8, 6),
+        new THREE.MeshLambertMaterial({ color: 0xff4d4d, emissive: 0x8a0000 }));
+      eye.position.set(0, .6, .46); g.add(eye);
+      for (const s of [-1, 1]) {
+        const arc = new THREE.Mesh(new THREE.TorusGeometry(.52, .05, 5, 12),
+          new THREE.MeshBasicMaterial({ color: 0x8fe3ff, transparent: true, opacity: .75 }));
+        arc.position.y = .6; arc.rotation.y = s * Math.PI / 4; arc.name = 'arc'; g.add(arc);
+      }
+      return g;
+    },
+    tick(e, dt) {
+      const k = Math.sin(e.t * e.speed / Math.max(1, e.range) * 2), ax = e.axis === 'x';
+      e.pos[ax ? 'x' : 'z'] = e.home[ax ? 'x' : 'z'] + k * e.range / 2;
+      e.pos.y = e.home.y + Math.sin(e.t * 1.8) * e.bob;
+      for (const c of e.mesh.children) if (c.name === 'arc') c.rotation.z += dt * 6;
     },
   },
   // Hovers and bobs. Stompable, but it's moving in three dimensions.

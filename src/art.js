@@ -177,6 +177,95 @@ function orionAtlas() {
   return cv;
 }
 
+/* ------------------------------------------------- crate face stencils */
+// The special crates used to differ from a plain one only by a tint, which is
+// invisible at a glance and worse than useless in shadow. Each now wears its
+// own stencil on every face — plus its own topper, built in world.js, so the
+// silhouette gives it away before you can even read the face.
+//
+// Drawn unlit and transparent, so the symbol stays legible on the shadowed
+// side of the crate.
+function starPath(g, cx, cy, r) {
+  g.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rr = i % 2 ? r * .44 : r, a = -Math.PI / 2 + i * Math.PI / 5;
+    const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
+    i ? g.lineTo(x, y) : g.moveTo(x, y);
+  }
+  g.closePath();
+}
+
+const SYMBOL = {
+  // Five-pointed star: this crate is worth a pile of them.
+  star(g, S) {
+    g.lineJoin = 'round';
+    starPath(g, S / 2, S / 2, S * .38);
+    g.fillStyle = '#ffd23f'; g.fill();
+    g.strokeStyle = '#5a3d00'; g.lineWidth = S * .055; g.stroke();
+  },
+  // Sootie. The lives counter is a cat, so the 1-UP crate is a cat.
+  life(g, S) {
+    const u = S / 100, cx = S / 2;
+    g.fillStyle = '#2b2431'; g.strokeStyle = '#2b2431';
+    g.lineJoin = 'round'; g.lineWidth = 3 * u;
+    for (const s of [-1, 1]) {                       // ears
+      g.beginPath();
+      g.moveTo(cx + s * 30 * u, 34 * u);
+      g.lineTo(cx + s * 34 * u, 8 * u);
+      g.lineTo(cx + s * 6 * u, 26 * u);
+      g.closePath(); g.fill(); g.stroke();
+    }
+    g.beginPath();                                   // head
+    g.ellipse(cx, 56 * u, 33 * u, 29 * u, 0, 0, Math.PI * 2);
+    g.fill(); g.stroke();
+    g.fillStyle = '#8ff0b4';                         // eyes
+    for (const s of [-1, 1]) {
+      g.beginPath(); g.ellipse(cx + s * 13 * u, 51 * u, 7 * u, 9 * u, 0, 0, Math.PI * 2); g.fill();
+    }
+    g.fillStyle = '#2b2431';
+    for (const s of [-1, 1]) {
+      g.beginPath(); g.ellipse(cx + s * 13 * u, 51 * u, 2.4 * u, 8 * u, 0, 0, Math.PI * 2); g.fill();
+    }
+    g.fillStyle = '#ff9db0';                         // nose
+    g.beginPath(); g.moveTo(cx, 68 * u); g.lineTo(cx - 5 * u, 62 * u); g.lineTo(cx + 5 * u, 62 * u);
+    g.closePath(); g.fill();
+    g.strokeStyle = '#ffffff'; g.lineWidth = 2.6 * u; // whiskers
+    for (const s of [-1, 1]) for (const dy of [-3, 3]) {
+      g.beginPath(); g.moveTo(cx + s * 16 * u, (65 + dy) * u); g.lineTo(cx + s * 44 * u, (60 + dy * 2) * u); g.stroke();
+    }
+  },
+  // Three chevrons and a plate: this one throws you up in the air.
+  spring(g, S) {
+    const u = S / 100, cx = S / 2;
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    for (let i = 0; i < 3; i++) {
+      const y = (34 + i * 21) * u;
+      g.beginPath();
+      g.moveTo(cx - 27 * u, y + 16 * u); g.lineTo(cx, y); g.lineTo(cx + 27 * u, y + 16 * u);
+      g.strokeStyle = '#0b3a5c'; g.lineWidth = 15 * u; g.stroke();
+      g.strokeStyle = '#dff2ff'; g.lineWidth = 8 * u; g.stroke();
+    }
+    g.beginPath(); g.moveTo(cx - 30 * u, 92 * u); g.lineTo(cx + 30 * u, 92 * u);
+    g.strokeStyle = '#0b3a5c'; g.lineWidth = 14 * u; g.stroke();
+    g.strokeStyle = '#dff2ff'; g.lineWidth = 7 * u; g.stroke();
+  },
+};
+
+const faceCache = new Map();
+/** Transparent stencil for a crate kind, or null for a plain crate. */
+export function crateFace(kind) {
+  if (!SYMBOL[kind]) return null;
+  if (!faceCache.has(kind)) {
+    const S = 128, cv = document.createElement('canvas');
+    cv.width = cv.height = S;
+    SYMBOL[kind](cv.getContext('2d'), S);
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    faceCache.set(kind, t);
+  }
+  return faceCache.get(kind);
+}
+
 /* ---------------------------------------------------------------- loading */
 const cache = new Map();
 const loader = new THREE.TextureLoader();
