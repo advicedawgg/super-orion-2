@@ -1,8 +1,11 @@
 # Super Orion 2 — read this first
 
 A Crash-Bandicoot-style 3D platformer in three.js, built for the user's kid Orion.
-Live at **https://orion2.advicedawg.com**, fronted by the launcher at
-**https://orion.advicedawg.com** (that's `D:\dev\Oriongame`, where game 1 lives as `1.html`).
+Live at **https://orion2.advicedawg.com**, fronted by the launcher menu at
+**https://orion.advicedawg.com** (that's game 1's repo, which also hosts game 1 itself).
+
+**This repo is public.** Anything naming a machine, a container or a drive letter goes in
+`AGENTS.local.md`, which is gitignored — not in here, `AGENTS.md` or `README.md`.
 
 **`AGENTS.md` is the working manual — read it before editing anything.** This file is only
 the part you must not miss.
@@ -30,8 +33,13 @@ frame for the whole coyote window. None of those were visible in the diff.
   its **top face**. Write Z anchors out in full — chaining them is how platforms silently
   overlapped and z-fought.
 - Anything the game and the checker must agree on lives in exactly ONE exported function
-  (`crateSolid`, `trunkSolid`, `killPlane` in `src/builder.js`). Add to that list rather than
-  duplicating a derivation. A checker that models the world separately is a checker that lies.
+  (`crateSolid`, `trunkSolid`, `killPlane`, `FLOATING` in `src/builder.js`; `tuning()` in
+  `src/physics.js`). Add to that list rather than duplicating a derivation. A checker that
+  models the world separately is a checker that lies.
+- A level's `mode` (`'swim'` / `'jet'`) is a patch on `T`, read by both the game and the
+  checker through `tuning(def.mode)`. Both are **free modes** — vertical travel is unbounded,
+  so they REQUIRE a `ceilY`, and the checker deliberately stops proving reachability there.
+  See AGENTS.md → Movement modes.
 
 ## Running it
 
@@ -43,14 +51,17 @@ npx http-server -p 8791 -c-1      # -c-1 matters; http-server caches for an hour
 
 ## What to work on
 
-See **`README.md` → Next**. In short: levels need to be much longer (the kid is good at
-games), crates need to differ by more than a tint, the Crumble Coast track wants replacing,
-and underwater + jetpack levels are the intended next mechanics — both are new camera rigs
-on the existing engine, which is why the camera was built the way it was.
+See **`README.md` → Next**. The previous playtest list is done: 5 levels totalling 3,154u
+(was 2 levels and 358u), crates carry a stencil and a topper, the coast track is re-rolled,
+and swim + jetpack shipped as `mode` patches on the tuning.
+
+What is left is mostly **things a machine cannot check**: whether the difficulty curve
+actually suits Orion, and whether the four new music tracks sound right. Both need a human.
 
 ## Generating assets
 
-Textures (Krea 2) and music (MiniMax Music 3) both run locally on the 4090 through **the same
-ComfyUI on :8188** — they cannot share the GPU, so run one at a time, and neither auto-starts.
-`tools/gentex.js`, `tools/genmusic.js`, `tools/looppoints.js`. AGENTS.md documents the traps;
-several of them cost a wasted run each, so read that section before generating anything.
+Textures (Krea 2) and music (MiniMax Music 3) both run locally on one GPU through ComfyUI —
+they cannot share it, so run one stack at a time, and neither auto-starts. `tools/gentex.js`,
+`tools/genmusic.js`, `tools/looppoints.js`. AGENTS.md documents the traps; several of them
+cost a wasted run each, so read that section before generating anything. Paths and launch
+commands are in `AGENTS.local.md`.

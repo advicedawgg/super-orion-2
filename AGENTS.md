@@ -19,8 +19,14 @@ no browser, no deps. Between them they have already caught, on real edits:
 - a kill plane set *below* the visible world floor, so the player sank through the scenery
 - a jump that re-fired every frame for the whole coyote window, stuttering the SFX and
   silently spending the double jump
+- a star trail running straight through a crate row, in **both** shipped levels — invisible
+  pickups that the reachability pass can't see, because the crate they are inside is itself
+  perfectly reachable
 
 None of those were visible by reading the diff.
+
+`check.js` also prints each level's **length in world units**. That number is the point of
+the whole "levels are too short" note — star counts don't answer it.
 
 ## Why the checker is trustworthy
 
@@ -31,6 +37,36 @@ sees it for free.
 Anything both the game and the checker need to agree on lives in exactly one exported
 function — `crateSolid`, `trunkSolid`, `killPlane`. Add to that list rather than
 duplicating a derivation. A checker that models the world separately is a checker that lies.
+
+## Movement modes
+
+A level can set `mode: 'swim'` or `mode: 'jet'`. A mode is **nothing but a patch on `T`**
+(`MODES` in `src/physics.js`), and both the game and the checker read it through
+`tuning(def.mode)` — so a mode cannot mean one thing to the player and another to
+the gate.
+
+| mode | lift | feel |
+|---|---|---|
+| *(none)* | jump, then double jump | the running game |
+| `swim` | every press is another stroke, no limit | low gravity, sinks at 6.5u/s |
+| `jet` | HOLD to thrust, climb capped at 14u/s | no jump at all |
+
+Both new modes are **free modes**: vertical travel is unbounded. Two consequences you
+cannot design around:
+
+- `ceilY` is **required** — the water surface, or the sky. It caps the player's feet.
+  Without it the level stops being a corridor, because there is nothing above you.
+- The checker **does not prove reachability** in a free mode. A jump-arc flood fill
+  answers a question that isn't being asked when you can swim straight up. Geometry,
+  the ceiling and buried content are still enforced; the *layout* is on you.
+
+Ground pound is disabled in free modes on purpose: `stomping` suppresses both the
+stroke and the thruster until you land, so over water or a void it would take away
+every means of lift you have.
+
+Floating enemies (`flapjack`, `jelly`, `zapdrone`) are listed in `FLOATING` in
+`src/builder.js` — the pure module, so the checker can tell "hovers by design" from
+"placed in mid-air by mistake". Add new hovering kinds there as well as to `ENEMY`.
 
 ## Level authoring
 
@@ -81,21 +117,30 @@ and has to be downloaded.
 | Level music | `node tools/genmusic.js <id>` → writes `assets/audio/<id>.mp3`; add the id to `TRACKS` in `src/audio.js` |
 | Real texture | drop `assets/tex/<name>.png`, add `<name>` to `REAL` in `src/art.js` |
 
-**Everything generative here runs on the local 4090 and the two stacks cannot share it.**
-MiniMax Music 3 lives in the ComfyUI on `:8188`; Krea 2 is the separate stack on `:8189`
-(`D:\krea2-adapter\start_krea2_stack.bat`). Start one, use it, stop it, start the other.
+**Everything generative here runs on one local GPU, and the two stacks cannot share it.**
+MiniMax Music 3 lives in a ComfyUI instance; Krea 2 is a separate stack on its own port.
+Start one, use it, stop it, start the other. Neither auto-starts.
 
-```sh
-cd /d/ComfyUI_windows_portable
-./python_embeded/python.exe -s ComfyUI/main.py --port 8188 --use-sage-attention --disable-auto-launch
-```
+> Paths, ports and the exact launch command are in **`AGENTS.local.md`**, which is
+> gitignored — this repo is public and those notes describe a private setup.
 
-Music gotchas, both learned the hard way:
+Music gotchas, learned the hard way:
 
-1. **`max_duration` is a ceiling, not a target.** With an empty `lyrics` field the model calls
-   the song finished after ~14 seconds no matter what you ask for. The `[Intro]/[Theme A]/
-   [Bridge]/[Outro]` structure block in `genmusic.js` is the thing that buys a full-length
-   track — 94s vs 13s, everything else identical. Don't remove it to "simplify".
+1. **`max_duration` is a ceiling, not a target,** and the `lyrics` field is what decides
+   whether you get near it. With a genuinely empty `lyrics` the model calls the song
+   finished after ~14 seconds no matter what you ask for.
+
+   It is the section **tags** that buy the length — the **bodies** do nothing but get sung.
+   Measured with a controlled A/B (same seed, same caption, only the bodies differing):
+
+   | `lyrics` | result |
+   |---|---|
+   | `[Intro]` + `(instrumental)` | 66.0s, and audible wordless vocals |
+   | `[Intro]` + nothing | 100.0s, the full ceiling |
+
+   So `genmusic.js` now sends tags with empty bodies by default. `WORDED` is kept, and
+   pinned on the tracks that shipped with it, because re-rolling music a kid already knows
+   is a real cost rather than a free consistency win.
 2. Use `SaveAudioMP3`, not `SaveAudioAdvanced` — the latter's `format` is a
    `COMFY_DYNAMICCOMBO_V3` with `quality` nested inside it, which the flat API prompt
    format cannot express (`Required input is missing: format.quality`).
@@ -153,12 +198,18 @@ never produce — the reviewer heard it and rightly called the loop broken.
 Key art is made with **Nano Banana 2** (`google/gemini-3.1-flash-image`) through the
 openrouter MCP. Two gotchas, both learned the hard way:
 
-1. Output lands **inside the `mcp-openrouter` container** on Unraid. Get it out with
-   `ssh unraid 'docker cp mcp-openrouter:/<file> /mnt/user/appdata/<file>'`.
-2. For a transparent logo, generate on flat `#00FF00` and key it on the workspace hub
-   (the only box here with ImageMagick):
-   `convert in.png -alpha set -fuzz 32% -transparent "#00FF00" -channel A -morphology Erode Diamond:1 +channel -trim +repage out.png`
-   The erode is not optional — without it you ship a green halo.
+1. The generated file is **not written anywhere you can reach directly** — it lands inside
+   the MCP's own container and has to be copied out.
+2. For a transparent logo, generate on flat `#00FF00` and key it out with ImageMagick,
+   eroding the alpha by one pixel afterwards. The erode is not optional — without it you
+   ship a visible green halo — and the key must be a global `-transparent` rather than a
+   corner floodfill, or letter counters stay green.
+
+> The exact commands, container name and which box has ImageMagick are in
+> **`AGENTS.local.md`** (gitignored).
+
+**Judging a track by ear is a human job.** An audio model was tried for "does this have
+vocals" and failed its control — see `AGENTS.local.md`. Get a person to listen.
 
 The house style is set by the Steam Deck grid art for game 1: cosmic indigo, gold stars,
 Orion in a white helmet with an orange stripe, blue overalls with a white chest star,

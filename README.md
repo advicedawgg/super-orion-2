@@ -20,6 +20,8 @@ repo is the deployable artifact. Deploy with `npx wrangler deploy`.
 |---|---|
 | ← → ↑ ↓ / WASD | Move (camera-relative) |
 | SPACE | Jump — press again in the air for a **double jump** |
+| SPACE (underwater) | **Swim stroke** — tap over and over to rise; there is no limit |
+| SPACE (jetpack) | **Hold to fly**, let go to drop. There is no jump in a flight level |
 | X | **Spin attack** — kills most things without landing on them |
 | C (in the air) | **Ground pound** — straight down, smashes crates |
 | P / ESC | Pause · R restart · M music · F fullscreen |
@@ -69,28 +71,26 @@ the line between "satisfying" and "a seven-year-old gives up".
 
 ## Assets
 
-**Music** is generated locally on the 4090 by **MiniMax Music 3**, through the ComfyUI instance on `:8188`:
+**Music** is generated locally by **MiniMax Music 3** through ComfyUI:
 
 ```sh
 node tools/genmusic.js            # every track
 node tools/genmusic.js jungle     # just one
 ```
 
-Start ComfyUI first — it is not auto-started, and it **cannot share the GPU with the Krea2 stack on
-`:8189`**. Run one at a time.
+Start ComfyUI first — it is not auto-started, and it **cannot share the GPU with the Krea 2 texture
+stack**. Run one at a time. (Local paths and the launch command live in `AGENTS.local.md`, which is
+gitignored — this repo is public.)
 
-```sh
-cd /d/ComfyUI_windows_portable
-./python_embeded/python.exe -s ComfyUI/main.py --port 8188 --use-sage-attention --disable-auto-launch
-```
-
-The non-obvious part: `max_duration` is a **ceiling, not a target**. With an empty `lyrics` field the
-model decides the song is over after ~14 seconds. The `[Intro]/[Theme A]/[Bridge]/[Outro]` structure
-block in `genmusic.js` is what buys a full-length track — 94s instead of 13s, everything else identical.
+The non-obvious part: `max_duration` is a **ceiling, not a target**, and the `lyrics` field decides
+whether you get near it. Empty lyrics → the model stops after ~14 seconds. Section *tags* buy the
+length; section *bodies* buy nothing and sometimes get sung. Same seed and caption, bodies the only
+difference: `(instrumental)` bodies gave 66s with audible wordless vocals, empty bodies gave the full
+100s. `genmusic.js` therefore sends empty bodies by default.
 
 **Textures** still generate into canvases at boot, so the game has zero *required* asset files. Drop-in
-slot: put `assets/tex/<name>.png` in place and add `<name>` to `REAL` in `src/art.js`. Krea 2 on `:8189`
-is the intended source.
+slot: put `assets/tex/<name>.png` in place and add `<name>` to `REAL` in `src/art.js`. Krea 2 is the
+intended source.
 
 **SFX stay synthesised on purpose.** A generated wav of a jump blip is worse than four lines of WebAudio
 and has to be downloaded.
@@ -103,29 +103,35 @@ and has to be downloaded.
 **Live at [orion2.advicedawg.com](https://orion2.advicedawg.com)**, and fronted by the launcher menu at
 [orion.advicedawg.com](https://orion.advicedawg.com).
 
-Playable end to end: 2 levels, 98 collectable stars, 4 crate types, 3 enemy types, moving platforms,
-checkpoints, lives, spin/ground-pound/double-jump, generated textures and a generated soundtrack.
+Playable end to end: **5 levels across 2 worlds, 844 collectable stars**, 4 crate types, 5 enemy types,
+moving platforms, checkpoints, lives, spin/ground-pound/double-jump, **swimming and a jetpack**,
+generated textures and a full generated soundtrack with real loop points.
+
+| # | Level | Length | ⭐ | |
+|---|---|---|---|---|
+| 1 | Jungle Jog | 662u | 178 | |
+| 2 | Crumble Coast | 604u | 150 | |
+| 3 | Frostfizz Peaks | 623u | 180 | |
+| 4 | Sunken Reef | 616u | 155 | **swim** |
+| 5 | Cosmic Cannonball | 649u | 181 | **jetpack** |
+
+That is 3,154 units of level, up from 358.
 
 ## Next
 
-From playtesting, in rough priority order:
+The playtest list that drove the last round is done: levels are 3–4× longer with a new idea every
+30–40 units, crates carry a stencil and a topper rather than a tint, the Crumble Coast track is
+re-rolled, and underwater + jetpack shipped as `mode` patches on the tuning (see AGENTS.md).
 
-1. **Levels need to be a lot longer.** Orion is good at games and the current two are short. This is
-   the main gap — more length and more ideas per level, not just more levels.
+What is worth doing next, in rough priority order:
 
-   Concretely: Jungle Jog runs z 18 → −187, about **205 units**, which is roughly a minute of play.
-   Aim for **3–4× that**, and more importantly a new *idea* every 30–40 units rather than a longer
-   corridor of the same thing. The level already shows the pattern to extend — flat tutorial ground,
-   then gaps, then crates and the double jump, then hazards and movers, then a run home — so add
-   more distinct beats between the checkpoints instead of stretching the existing ones.
-
-   `node tools/check.js` prints each level's solid/star/crate/enemy counts, which is the quickest way
-   to see whether a level actually grew or just got longer.
-2. **Crates need to differ by more than a tint.** `plain`, `star`, `life` and `spring` currently share
-   one texture and only vary `tint` in `CRATE` (src/world.js), so you can't tell the bonus crate from
-   the bouncy one at a glance. They want distinct faces — a star stencil, a cat, an arrow/spring —
-   and ideally distinct silhouettes.
-3. Replace the Crumble Coast track. The loop is clean but the piece is off, and it has faint wordless
-   vocals (see the STRUCTURE note in `tools/genmusic.js`).
-4. Underwater and jetpack levels — both are new camera rigs on the existing engine, which is why the
-   camera was built the way it was.
+1. **Get Orion to play it and watch where he stops.** Five levels is a lot of new geometry that has
+   only ever been proven by the checker and a scripted flythrough. The difficulty curve across the
+   five is an educated guess.
+2. **Listen to the new tracks.** Four of the five are freshly generated. The vocal-bleed fix is
+   reasoned rather than heard — an audio model was tried and failed its control (`AGENTS.local.md`).
+3. **A level-select screen.** Game 1 has one; here, reaching Cosmic Cannonball means playing four
+   levels first, which is a lot to ask when you want to test the last one.
+4. `frost.mp3` masters ~3 dB quieter than the others. Not wrong, just noticeable if you switch levels.
+5. Backdrop trees are the mesh budget: Jungle Jog draws ~1470 meshes against ~800 for the others.
+   Fine on a desktop GPU, and it is the first thing to instance if the Steam Deck struggles.

@@ -8,6 +8,9 @@
 node_modules
 tools
 AGENTS.md
+AGENTS.local.md
+*.local.md
+CLAUDE.md
 README.md
 package.json
 wrangler.jsonc
