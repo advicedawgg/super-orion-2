@@ -146,8 +146,10 @@ function loadLevel(i) {
   const def = LEVELS[i];
   world = new World(scene, def);
   world.fx = worldFx;
-  hemi.color.set(def.sky[0]); hemi.groundColor.set(0x50603a);
+  hemi.color.set(def.sky[0]); hemi.groundColor.set(def.amb ?? 0x50603a);
   sun.color.set(def.sun);
+  sun.intensity = def.sunPower ?? 2.1;
+  player.setMode(def.mode, def.ceilY ?? null);
   G.spawn.set(...def.start);
   G.runStars = 0;
   player.reset(G.spawn);
@@ -196,7 +198,7 @@ function gameWin() {
   if (G.stars > G.best) { G.best = G.stars; localStorage.setItem(SAVE_KEY, JSON.stringify({ best: G.best })); }
   show(`<h1>YOU DID IT<small>SUPER ORION 2</small></h1>
     <p class="lead"><b>${G.stars}</b> stars collected. Best ever: <b>${G.best}</b>.<br>
-    More worlds are still being built — underwater, jetpacks, all of it.</p>
+    Jungle, coast, peaks, reef and the whole sky — you cleared the lot.</p>
     <p class="go">press SPACE to play again</p>`);
 }
 
@@ -210,10 +212,20 @@ function title() {
 }
 
 /* ---------------------------------------------------------------- camera */
-const CAM_OFF = new THREE.Vector3(0, 5.4, 11.5);
+// The rig. A level can move the camera back and up — which is the whole reason
+// the camera was built as an offset in the first place: underwater and flight
+// levels are this same rig with a different offset, not a different camera.
+const CAM_OFF = [0, 5.4, 11.5];
+const camOff = new THREE.Vector3();
+// Clearing the LAST level leaves G.level one past the end, and the camera keeps
+// running under the win screen — so this must not be a bare LEVELS[G.level].
+// It threw every frame on the WON state, which also stopped the render loop and
+// froze the picture behind the card.
+const shownLevel = () => LEVELS[Math.min(G.level, LEVELS.length - 1)];
 function camTarget(out) {
-  const yaw = LEVELS[G.level].camYaw || 0;
-  const off = CAM_OFF.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const def = shownLevel();
+  const off = camOff.set(...(def.camOff || CAM_OFF))
+    .applyAxisAngle(new THREE.Vector3(0, 1, 0), def.camYaw || 0);
   return out.copy(player.pos).add(off);
 }
 function snapCamera() {
@@ -237,7 +249,7 @@ function updateCamera(dt) {
   cam.lookAt(camAim);
 
   // Keep the shadow frustum glued to the player or shadows blink out.
-  const d = LEVELS[G.level].sunDir || [-0.5, 1, 0.6];
+  const d = shownLevel().sunDir || [-0.5, 1, 0.6];
   sun.position.set(player.pos.x + d[0] * 45, player.pos.y + d[1] * 45, player.pos.z + d[2] * 45);
   sun.target.position.copy(player.pos);
   sun.target.updateMatrixWorld();

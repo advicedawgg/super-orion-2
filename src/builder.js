@@ -6,6 +6,14 @@
 
 export const CRATE_SIZE = 1.8;
 
+/**
+ * Enemy kinds that hover instead of standing on something. Lives here, in the
+ * pure module, because tools/check.js fails a ground enemy placed in mid-air
+ * and must not fail a jellyfish for the same reason. world.js owns how they
+ * look and move; this is the only fact the checker needs.
+ */
+export const FLOATING = new Set(['flapjack', 'jelly', 'zapdrone']);
+
 /** Crate collider, derived in ONE place so the game and the checker agree. */
 export const crateSolid = c => ({
   x: c.x, y: c.y + CRATE_SIZE, z: c.z,

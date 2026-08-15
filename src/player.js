@@ -1,7 +1,7 @@
 // Orion: ~30 boxes, one 256px atlas, animated by rotating limb groups.
 // Exactly how an N64 character was built, minus the skinning.
 import * as THREE from 'three';
-import { T, step, jumpStep, jumpCut } from './physics.js';
+import { T, step, jumpStep, jumpCut, thrustStep, tuning, isFreeMode } from './physics.js';
 import { tex } from './art.js';
 import * as In from './input.js';
 
@@ -88,10 +88,33 @@ export class Player {
     this.spinFx.visible = false;
     this.rig.root.add(this.spinFx);
 
+    // Jetpack burn. Two nested cones under the feet — you cannot tell you are
+    // thrusting from the altitude alone, and a kid holding a button needs to
+    // see that the button is doing something.
+    this.jetFx = new THREE.Group();
+    for (const [r, h, c, y] of [[.30, 1.5, 0xffb03a, -.75], [.17, .95, 0xfff3b0, -.48]]) {
+      const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7),
+        new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: .85 }));
+      m.rotation.x = Math.PI; m.position.y = y;
+      this.jetFx.add(m);
+    }
+    this.jetFx.visible = false;
+    this.rig.root.add(this.jetFx);
+
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
     this.facing = Math.PI;
+    this.t = T;
+    this.ceilY = null;
     this.reset(new THREE.Vector3());
+  }
+
+  /** Switch movement mode (see MODES in physics.js). `ceilY` caps the FEET. */
+  setMode(mode, ceilY = null) {
+    this.t = tuning(mode);
+    this.ceilY = ceilY;
+    this.thrusting = false;
+    this.jetFx.visible = false;
   }
 
   reset(at) {
@@ -99,6 +122,7 @@ export class Player {
     this.grounded = false; this.coyote = 0; this.buffer = 0; this.jumps = 0;
     this.spinT = 0; this.spinCd = 0; this.hurtT = 0; this.stomping = false;
     this.squash = 0; this.stride = 0; this.airT = 0; this.cutting = false;
+    this.thrusting = false; this.jetFx.visible = false;
     this.rig.root.position.copy(at);
     this.rig.root.visible = true;
   }
@@ -107,6 +131,7 @@ export class Player {
   get invuln() { return this.hurtT > 0; }
 
   update(dt, solids, camYaw) {
+    const t = this.t;
     const ax = In.axis.x, az = In.axis.z;
     // Stick is screen-relative; rotate it into world space by the camera yaw.
     const s = Math.sin(camYaw), c = Math.cos(camYaw);
@@ -114,33 +139,50 @@ export class Player {
     const mag = Math.min(1, Math.hypot(wantX, wantZ));
 
     // --- horizontal ---
-    const ctrl = this.grounded ? 1 : T.AIR_CTRL;
-    const tgtX = wantX * T.SPEED, tgtZ = wantZ * T.SPEED;
-    const rate = (mag > .01 ? T.ACCEL : T.FRICTION) * ctrl * dt;
+    const ctrl = this.grounded ? 1 : t.AIR_CTRL;
+    const tgtX = wantX * t.SPEED, tgtZ = wantZ * t.SPEED;
+    const rate = (mag > .01 ? t.ACCEL : t.FRICTION) * ctrl * dt;
     this.vel.x += THREE.MathUtils.clamp(tgtX - this.vel.x, -rate, rate);
     this.vel.z += THREE.MathUtils.clamp(tgtZ - this.vel.z, -rate, rate);
 
-    // --- jump: coyote time + input buffering, the two things that make a
-    //     platformer feel fair rather than twitchy ---
-    const fired = jumpStep(this, dt, In.hit('jump'));
-    if (fired) { if (fired === 'jump2') this.squash = -.35; this.fire(fired); }
-    jumpCut(this, dt, In.down('jump'));
+    // --- lift: jump, stroke or thrust depending on the mode ---
+    if (t.THRUST) {
+      const was = this.thrusting;
+      this.thrusting = thrustStep(this, dt, In.down('jump'), t);
+      if (this.thrusting && !was) this.fire('thrust');
+    } else {
+      // coyote time + input buffering, the two things that make a platformer
+      // feel fair rather than twitchy
+      const fired = jumpStep(this, dt, In.hit('jump'), t);
+      if (fired) { if (fired === 'jump2') this.squash = -.35; this.fire(fired); }
+      jumpCut(this, dt, In.down('jump'), t);
+    }
+    this.jetFx.visible = !!this.thrusting;
+    if (this.thrusting) for (const f of this.jetFx.children) f.scale.set(1, .7 + Math.random() * .6, 1);
 
     // --- spin / stomp ---
     this.spinCd = Math.max(0, this.spinCd - dt);
     this.spinT = Math.max(0, this.spinT - dt);
-    if (In.hit('stomp') && !this.grounded && !this.stomping) {
-      this.stomping = true; this.vel.set(0, T.STOMP_V, 0); this.fire('stomp');
+    // No ground pound while swimming or flying. `stomping` blocks both the
+    // stroke and the thruster until you land, so over open water or a void it
+    // takes away every means of lift you have and drops you.
+    if (In.hit('stomp') && !isFreeMode(t) && !this.grounded && !this.stomping) {
+      this.stomping = true; this.vel.set(0, t.STOMP_V, 0); this.fire('stomp');
     } else if (In.hit('spin') && this.spinCd === 0 && !this.stomping) {
-      this.spinT = T.SPIN_TIME; this.spinCd = T.SPIN_TIME + T.SPIN_CD; this.fire('spin');
+      this.spinT = t.SPIN_TIME; this.spinCd = t.SPIN_TIME + t.SPIN_CD; this.fire('spin');
     }
     this.spinFx.visible = this.spinning;
     if (this.spinning) for (const r of this.spinFx.children) r.rotation.z += dt * 34;
 
     // --- integrate ---
-    this.vel.y = Math.max(-T.MAXFALL, this.vel.y - T.GRAV * dt);
+    this.vel.y = Math.max(-t.MAXFALL, this.vel.y - t.GRAV * dt);
     const was = this.grounded;
     const hitInfo = step(this.pos, this.vel, dt, solids);
+    // The roof of a swim or flight level: the water surface, or the sky. Without
+    // it there is nothing at all above you and the level stops being a corridor.
+    if (this.ceilY !== null && this.pos.y > this.ceilY) {
+      this.pos.y = this.ceilY; this.vel.y = Math.min(this.vel.y, 0);
+    }
     this.grounded = hitInfo.grounded;
     if (this.grounded) {
       this.jumps = 0;
@@ -190,7 +232,7 @@ export class Player {
       r.armL.rotation.x = r.armR.rotation.x = -2.4;
       r.body.rotation.x = .5;
     } else if (!this.grounded) {
-      const up = THREE.MathUtils.clamp(this.vel.y / T.JUMP_V, -1, 1);
+      const up = THREE.MathUtils.clamp(this.vel.y / this.t.JUMP_V, -1, 1);
       r.legL.rotation.x = -.5 - up * .5; r.legR.rotation.x = .3 + up * .4;
       r.armL.rotation.x = r.armR.rotation.x = -1.5 - up * 1.0;
       r.armL.rotation.z = .35; r.armR.rotation.z = -.35;

@@ -7,24 +7,27 @@
 // can't be reached. Eyeballing level geometry does not work. This does.
 
 import { LEVELS } from '../src/levels.js';
-import { buildLevel, killPlane } from '../src/builder.js';
-import { T } from '../src/physics.js';
+import { buildLevel, killPlane, FLOATING } from '../src/builder.js';
+import { T, tuning, isFreeMode } from '../src/physics.js';
 
 const SAFETY = 0.85;          // players are not frame-perfect; demand slack
-const TIGHT = 0.95;           // above this fraction of theoretical reach = warn
 
 /* ------------------------------------------------------------- jump model */
-const H1 = T.JUMP_V ** 2 / (2 * T.GRAV);
-const H2 = T.JUMP2_V ** 2 / (2 * T.GRAV);
-
-/** Furthest horizontal travel that still lands `dy` above the take-off point. */
-function reach(dy, v = T.JUMP_V, dbl = false) {
-  const h1 = v ** 2 / (2 * T.GRAV);
-  const rise = dbl ? h1 + H2 : h1;
-  if (dy > rise) return -1;                                  // can't get up there
-  const up = (v + (dbl ? T.JUMP2_V : 0)) / T.GRAV;
-  const fall = Math.sqrt(Math.max(0, 2 * (rise - dy) / T.GRAV));
-  return T.SPEED * (up + fall);
+// Derived per level from tuning(def.mode), so a swim or flight level is judged
+// by its own numbers rather than by a runner's jump arc.
+function arcs(t) {
+  const H1 = t.JUMP_V ** 2 / (2 * t.GRAV);
+  const H2 = t.JUMP2_V ** 2 / (2 * t.GRAV);
+  /** Furthest horizontal travel that still lands `dy` above the take-off point. */
+  const reach = (dy, v = t.JUMP_V, dbl = false) => {
+    const h1 = v ** 2 / (2 * t.GRAV);
+    const rise = dbl ? h1 + H2 : h1;
+    if (dy > rise) return -1;                                // can't get up there
+    const up = (v + (dbl ? t.JUMP2_V : 0)) / t.GRAV;
+    const fall = Math.sqrt(Math.max(0, 2 * (rise - dy) / t.GRAV));
+    return t.SPEED * (up + fall);
+  };
+  return { H1, H2, reach };
 }
 
 const rect = s => ({ x0: s.x - s.w / 2, x1: s.x + s.w / 2, z0: s.z - s.d / 2, z1: s.z + s.d / 2 });
@@ -47,7 +50,10 @@ const fail = m => { console.log(`  ✗ ${m}`); failures++; };
 const warn = m => { console.log(`  ! ${m}`); warnings++; };
 
 for (const def of LEVELS) {
-  console.log(`\n── ${def.name}  (${def.id})`);
+  const t = tuning(def.mode);
+  const free = isFreeMode(t);                 // swim / jet: vertical travel is unbounded
+  const { H1, H2, reach } = arcs(t);
+  console.log(`\n── ${def.name}  (${def.id})${def.mode ? `  [${def.mode}]` : ''}`);
   const d = buildLevel(def);
   // Scenery colliders (tree trunks) are walls, not places you can stand.
   const plats = d.solids.filter(s => !s.scenery)
@@ -56,6 +62,9 @@ for (const def of LEVELS) {
   if (!d.goal) fail('no goal');
   if (!def.start) fail('no start');
   if (def.killY === undefined && !d.ground) fail('needs either a ground() or an explicit killY');
+  // A stroke or a thruster climbs forever. Without a roof the level is not a
+  // corridor any more — you rise out of it and the goal is the only thing left.
+  if (free && def.ceilY === undefined) fail(`${def.mode} levels need a ceilY (the water surface / the sky)`);
 
   // Movers reach their far end, so a mover connects BOTH endpoints.
   const movEnd = new Map(d.movers.map(m => [m.s, m.to]));
@@ -68,7 +77,8 @@ for (const def of LEVELS) {
   /* ---- reachability flood-fill ---- */
   const start = { x: def.start[0], y: def.start[1], z: def.start[2] };
   const seeds = plats.filter(p => gapPt(start, p.r) < 0.6 && p.top <= start.y + 0.6 && p.top > start.y - 4);
-  if (!seeds.length) fail(`start ${JSON.stringify(def.start)} has no ground under it`);
+  // You start floating in a swim or flight level; only a runner needs a floor.
+  if (!seeds.length && !free) fail(`start ${JSON.stringify(def.start)} has no ground under it`);
 
   /** Fraction of a's jump arc that getting to b consumes. >1 = impossible. */
   const launchV = p => p.spring ? T.JUMP_V * 1.35 : T.JUMP_V;
@@ -83,8 +93,11 @@ for (const def of LEVELS) {
     return best;
   }
 
-  const reached = new Set(seeds);
-  const queue = [...seeds];
+  // A stroke or a thruster reaches any open point, so flood-filling a jump arc
+  // would only prove something that isn't in question. Everything counts as
+  // reached; the geometry checks below are what carry a free-mode level.
+  const reached = free ? new Set(plats) : new Set(seeds);
+  const queue = free ? [] : [...seeds];
   while (queue.length) {
     const a = queue.pop();
     for (const b of plats) {
@@ -102,7 +115,7 @@ for (const def of LEVELS) {
   // a post-pass matters: during the flood fill you get whichever edge happened
   // to discover the node first, which is noise.)
   let worstRatio = 0, worstDesc = '';
-  for (const b of reached) {
+  for (const b of free ? [] : reached) {
     if (seeds.includes(b)) continue;
     let easiest = Infinity;
     for (const a of reached) if (a !== b) easiest = Math.min(easiest, edgeRatio(a, b));
@@ -138,7 +151,7 @@ for (const def of LEVELS) {
 
   // Ground enemies need floor. A grumblin in mid-air is a level-design typo.
   for (const e of d.enemies) {
-    if (e.kind === 'flapjack') continue;
+    if (FLOATING.has(e.kind)) continue;
     const under = d.solids.some(s => {
       const r = rect(s);
       return e.x >= r.x0 - .6 && e.x <= r.x1 + .6 && e.z >= r.z0 - .6 && e.z <= r.z1 + .6
@@ -181,13 +194,42 @@ for (const def of LEVELS) {
   if (d.ground && killY <= d.ground.y)
     fail(`kill plane ${killY} is at/below the world floor ${d.ground.y} — you'd sink through it`);
 
+  const label = ([k, p]) => `${k}(${p.x.toFixed(0)},${p.y.toFixed(1)},${p.z.toFixed(0)})`;
+  const pickups = [
+    ...d.stars.map(s => ['star', s]), ...d.crates.map(c => ['crate', c]),
+    ...d.checkpoints.map(c => ['checkpoint', c]), ...(d.goal ? [['goal', d.goal]] : []),
+  ];
+
+  // Nothing playable above the roof of a swim or flight level. The roof is the
+  // only thing keeping it a corridor instead of open sky.
+  if (def.ceilY !== undefined) {
+    const over = pickups.filter(([, p]) => p.y > def.ceilY - 0.4);
+    if (over.length) fail(`${over.length} item(s) at/above the ceiling ${def.ceilY}, e.g. ${over.slice(0, 3).map(label).join(' ')}`);
+    if (def.start && def.start[1] > def.ceilY) fail(`start is above the ceiling ${def.ceilY}`);
+  }
+
+  // Content buried inside a solid: invisible and uncollectable, and the flood
+  // fill can't see it because the platform it sits in is perfectly reachable.
+  const inside = p => d.solids.some(s => {
+    const b = rect(s);
+    return p.x > b.x0 + .05 && p.x < b.x1 - .05 && p.z > b.z0 + .05 && p.z < b.z1 - .05
+      && p.y > s.y - s.h + .05 && p.y < s.y - .05;
+  });
+  const buried = [...pickups, ...d.enemies.map(e => [e.kind, e])].filter(([, p]) => inside(p));
+  if (buried.length) fail(`${buried.length} item(s) buried inside a solid, e.g. ${buried.slice(0, 3).map(label).join(' ')}`);
+
   if (worstRatio > SAFETY)
     warn(`tightest required jump eats ${(worstRatio * 100).toFixed(0)}% of the jump arc (want <${SAFETY * 100}%) — ${worstDesc}`);
 
   const totalStars = d.stars.length + d.crates.reduce((n, c) => n + ({ plain: 1, star: 5 }[c.kind] || 0), 0);
-  console.log(`  solids ${d.solids.length}  stars ${d.stars.length}  crates ${d.crates.length}  enemies ${d.enemies.length}  movers ${d.movers.length}  → ${totalStars} collectable stars`);
+  // Length is a first-class number here: "the levels are too short" was the
+  // headline playtest note, and star counts alone don't answer it.
+  const zs = d.solids.map(s => s.z);
+  const len = Math.max(...zs) - Math.min(...zs);
+  console.log(`  length ${len.toFixed(0)}u  solids ${d.solids.length}  stars ${d.stars.length}  crates ${d.crates.length}  enemies ${d.enemies.length}  movers ${d.movers.length}  → ${totalStars} collectable stars`);
 }
 
-console.log(`\nreach: single ${reach(0).toFixed(1)}u flat / ${H1.toFixed(2)}u up · double ${reach(0, T.JUMP_V, true).toFixed(1)}u flat / ${(H1 + H2).toFixed(2)}u up`);
+const A = arcs(T);
+console.log(`\nreach (running): single ${A.reach(0).toFixed(1)}u flat / ${A.H1.toFixed(2)}u up · double ${A.reach(0, T.JUMP_V, true).toFixed(1)}u flat / ${(A.H1 + A.H2).toFixed(2)}u up`);
 console.log(failures ? `\nFAIL — ${failures} error(s), ${warnings} warning(s)` : `\nPASS — ${warnings} warning(s)`);
 process.exit(failures ? 1 : 0);

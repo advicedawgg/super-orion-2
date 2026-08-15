@@ -26,6 +26,37 @@ export const MAX_GAP = 2 * (T.JUMP_V / T.GRAV) * T.SPEED;      // ~5.8u
 /** Highest step a single jump can land on. */
 export const MAX_RISE = (T.JUMP_V * T.JUMP_V) / (2 * T.GRAV);  // ~2.39u
 
+/* ------------------------------------------------------------------ modes */
+// A movement mode is nothing but a patch on T. Both the game and tools/check.js
+// get their numbers from tuning(def.mode), so a mode can never mean one thing
+// to the player and another to the checker.
+//
+//   normal — run and jump. Everything the kid already knows.
+//   swim   — low gravity, slow sink, and every press is another stroke with no
+//            limit, so you climb by tapping rather than by jumping twice.
+//   jet    — no jump at all: HOLD to thrust, release to fall.
+//
+// swim and jet are FREE modes — vertical travel is unbounded, which is why
+// levels using them need a `ceilY` roof and why the checker stops trying to
+// prove reachability from a jump arc (see tools/check.js).
+export const MODES = {
+  normal: {},
+  swim: {
+    GRAV: 11, MAXFALL: 6.5, JUMP_V: 8.6, SPEED: 7.8,
+    ACCEL: 46, FRICTION: 34, AIR_CTRL: 1, CUT: 1,
+    STROKE: true,                     // press = one stroke, unlimited
+  },
+  jet: {
+    GRAV: 24, MAXFALL: 20, SPEED: 12,
+    ACCEL: 60, FRICTION: 52, AIR_CTRL: 1,
+    THRUST: 64, CLIMB: 14,            // hold-to-thrust, capped climb rate
+  },
+};
+/** Tuning for a mode. Falls back to plain running for an unknown name. */
+export const tuning = mode => (MODES[mode] ? { ...T, ...MODES[mode] } : T);
+/** True when vertical travel is unbounded (stroke or thrust). */
+export const isFreeMode = t => !!(t.STROKE || t.THRUST);
+
 export const bounds = s => ({
   x0: s.x - s.w / 2, x1: s.x + s.w / 2,
   y0: s.y - s.h, y1: s.y,
@@ -80,21 +111,27 @@ function substep(p, v, dt, solids, out) {
 // Lives here rather than in player.js so node can drive it. `p` needs
 // {vel:{y}, grounded, jumps, coyote, buffer, stomping, cutting}.
 
-/** One frame of jump input. Returns null | 'jump' | 'jump2'. */
-export function jumpStep(p, dt, pressed) {
-  p.coyote = p.grounded ? T.COYOTE : Math.max(0, p.coyote - dt);
-  p.buffer = pressed ? T.BUFFER : Math.max(0, p.buffer - dt);
+/** One frame of jump input. Returns null | 'jump' | 'jump2' | 'stroke'. */
+export function jumpStep(p, dt, pressed, t = T) {
+  p.coyote = p.grounded ? t.COYOTE : Math.max(0, p.coyote - dt);
+  p.buffer = pressed ? t.BUFFER : Math.max(0, p.buffer - dt);
   if (p.buffer <= 0 || p.stomping) return null;
+  // Swimming: a stroke is always available, so you rise by tapping. No coyote
+  // window and no jump budget — both are ideas that only mean anything on land.
+  if (t.STROKE) {
+    p.vel.y = t.JUMP_V; p.jumps = 0; p.cutting = false; p.buffer = 0;
+    return 'stroke';
+  }
   // Both windows are CONSUMED on use. Leaving them open re-fires the jump every
   // frame for the whole coyote window, then spends the double jump by itself
   // the moment it closes.
   if (p.coyote > 0) {
-    p.vel.y = T.JUMP_V; p.jumps = 1; p.cutting = true;
+    p.vel.y = t.JUMP_V; p.jumps = 1; p.cutting = true;
     p.buffer = 0; p.coyote = 0;
     return 'jump';
   }
   if (p.jumps === 1) {
-    p.vel.y = T.JUMP2_V; p.jumps = 2; p.cutting = true;
+    p.vel.y = t.JUMP2_V; p.jumps = 2; p.cutting = true;
     p.buffer = 0;
     return 'jump2';
   }
@@ -102,9 +139,16 @@ export function jumpStep(p, dt, pressed) {
 }
 
 /** Release-early damping — only ever applied to a jump the player pressed for. */
-export function jumpCut(p, dt, holding) {
+export function jumpCut(p, dt, holding, t = T) {
   if (p.vel.y <= 0) p.cutting = false;
-  if (p.cutting && !holding && p.vel.y > 0) p.vel.y *= Math.pow(T.CUT, dt * 60);
+  if (p.cutting && !holding && p.vel.y > 0) p.vel.y *= Math.pow(t.CUT, dt * 60);
+}
+
+/** One frame of hold-to-thrust (jet mode). Returns true while burning. */
+export function thrustStep(p, dt, holding, t) {
+  if (!holding || p.stomping) return false;
+  p.vel.y = Math.min(p.vel.y + t.THRUST * dt, t.CLIMB);
+  return true;
 }
 
 /** Highest solid top strictly below `fromY` under (x,z), or null. */
@@ -151,13 +195,13 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('physics.js'))
 
   /* --- jump machine. One press must buy exactly one jump. --- */
   const mk = () => ({ vel: { y: 0 }, grounded: true, jumps: 0, coyote: 0, buffer: 0, stomping: false, cutting: false });
-  const run = (frames, pressOn, held = () => false) => {
+  const run = (frames, pressOn, held = () => false, t = T) => {
     const p = mk(), got = [];
     for (let i = 0; i < frames; i++) {
-      const f = jumpStep(p, 1 / 60, pressOn(i));
+      const f = jumpStep(p, 1 / 60, pressOn(i), t);
       if (f) { got.push([i, f]); p.grounded = false; }   // step() leaves the ground at once
-      jumpCut(p, 1 / 60, held(i));
-      p.vel.y -= T.GRAV / 60;
+      jumpCut(p, 1 / 60, held(i), t);
+      p.vel.y -= t.GRAV / 60;
     }
     return got;
   };
@@ -184,6 +228,29 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('physics.js'))
   const cut = mk(); cut.vel.y = T.JUMP_V; cut.cutting = true;
   jumpCut(cut, 1 / 60, false);
   ok('pressed jump is cut on release', cut.vel.y < T.JUMP_V * 0.6);
+
+  /* --- modes --- */
+  const sw = tuning('swim'), jet = tuning('jet');
+  ok('unknown mode falls back to running', tuning('nonsense') === T);
+
+  // Swimming: the fourth tap must work exactly like the first. On land the
+  // third press buys nothing; that limit must not follow you into the water.
+  ev = run(80, i => i % 14 === 0, () => false, sw);
+  ok(`swim strokes never run out (got ${ev.length})`,
+    ev.length === 6 && ev.every(e => e[1] === 'stroke'));
+
+  // …and a stroke is not damped by letting go, or holding the button would be
+  // the only way to swim up.
+  const st = mk(); jumpStep(st, 1 / 60, true, sw);
+  jumpCut(st, 1 / 60, false, sw);
+  ok('swim stroke ignores jump-cut', st.vel.y === sw.JUMP_V);
+
+  // Jetpack: hold climbs to a cap and stays there; release means you fall.
+  const jp = { vel: { y: 0 }, stomping: false };
+  for (let i = 0; i < 120; i++) { thrustStep(jp, 1 / 60, true, jet); jp.vel.y -= jet.GRAV / 60; }
+  ok(`thrust climbs to its cap (${jp.vel.y.toFixed(1)} <= ${jet.CLIMB})`,
+    jp.vel.y > 0 && jp.vel.y <= jet.CLIMB + 1e-9);
+  ok('thrust off = no lift', thrustStep(jp, 1 / 60, false, jet) === false);
 
   console.log('PASS physics');
 }
