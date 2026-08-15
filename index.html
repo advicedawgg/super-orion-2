@@ -100,6 +100,12 @@
   <div class="btn" id="bPause">❚❚</div>
 </div>
 
+<script>
+// The Steam Deck serves an offline mirror of both games off 127.0.0.1, where
+// this game sits at /2/ under the menu instead of on its own domain.
+if (location.hostname === '127.0.0.1') quit.href = '../';
+</script>
+
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
 </script>
