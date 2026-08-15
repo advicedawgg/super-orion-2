@@ -34,6 +34,18 @@ function surface(name) {
   return matCache.get(name);
 }
 
+/** What a platform wears on top vs down its sides. `cap` adds the overhang. */
+const SURFACE = {
+  grass: { top: 'grass', side: 'dirt', cap: true },
+  sand: { top: 'sand', side: 'rock', cap: true },
+  dirt: { top: 'dirt', side: 'rock', cap: true },
+  rock: { top: 'rock', side: 'rock' },
+  ice: { top: 'ice', side: 'rock', cap: true },
+  metal: { top: 'metal', side: 'metal' },
+};
+const CAP = 0.45;   // thickness of the turf layer
+const LIP = 0.18;   // how far it overhangs the cliff face
+
 function starGeometry() {
   if (geoCache.has('#star')) return geoCache.get('#star');
   const s = new THREE.Shape();
@@ -83,12 +95,34 @@ export class World {
   }
 
   /* ---- construction ---- */
+  // One texture on all six faces reads as a "texture cube". A real platform is
+  // grass on top and rock down the cliff face, with the turf overhanging the
+  // edge a little — which is also what the key art shows.
   addSolidMesh(s) {
-    const m = new THREE.Mesh(tiledBox(s.w, s.h, s.d, 4), surface(s.tex));
-    m.position.set(s.x, s.y - s.h / 2, s.z);
-    m.castShadow = true; m.receiveShadow = true;
-    s.mesh = m; this.group.add(m);
-    return m;
+    const set = SURFACE[s.tex] || { top: s.tex, side: s.tex };
+    const side = surface(set.side), top = surface(set.top);
+
+    // s.mesh is a Group anchored at the solid's TOP-CENTRE, matching how
+    // solids are defined, so movers can just copy their position onto it.
+    const g = new THREE.Group();
+    g.position.set(s.x, s.y, s.z);
+
+    if (set.cap && s.h >= 1.5) {
+      const bodyH = s.h - CAP;
+      const body = new THREE.Mesh(tiledBox(s.w, bodyH, s.d, 4), side);
+      body.position.y = -CAP - bodyH / 2;
+      const cap = new THREE.Mesh(tiledBox(s.w + LIP, CAP, s.d + LIP, 4), top);
+      cap.position.y = -CAP / 2;
+      g.add(body, cap);
+    } else {
+      // BoxGeometry groups are +X,-X,+Y,-Y,+Z,-Z — top face only gets `top`.
+      const m = new THREE.Mesh(tiledBox(s.w, s.h, s.d, 4), [side, side, top, side, side, side]);
+      m.position.y = -s.h / 2;
+      g.add(m);
+    }
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    s.mesh = g; this.group.add(g);
+    return g;
   }
 
   addStar(p) {
@@ -219,7 +253,7 @@ export class World {
       const nz = m.from.z + (m.to.z - m.from.z) * k;
       const dx = nx - m.s.x, dy = ny - m.s.y, dz = nz - m.s.z;
       m.s.x = nx; m.s.y = ny; m.s.z = nz; m.s._b = null;
-      m.s.mesh.position.set(nx, ny - m.s.h / 2, nz);
+      m.s.mesh.position.set(nx, ny, nz);      // group is anchored at top-centre
       // Carry whoever was standing on it as of last frame.
       if (player.riding === m.s) { player.pos.x += dx; player.pos.y += dy; player.pos.z += dz; }
     }
