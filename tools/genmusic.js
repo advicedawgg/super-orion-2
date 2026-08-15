@@ -21,17 +21,24 @@ const OUT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'asset
 // Captions follow the model's "Global Metadata:" convention, and every one says
 // instrumental — a kids' platformer must not have a singer competing with the SFX.
 //
-// This goes in the model's `lyrics` slot. It is NOT optional: with an empty
-// lyrics field the model decides the song is over after ~14s regardless of
-// max_duration, which is a ceiling and not a target. The section tags are what
-// buy you a full-length track.
+// This goes in the model's `lyrics` slot. It is NOT optional: with a genuinely
+// empty lyrics field the model decides the song is over after ~14s regardless of
+// max_duration, which is a ceiling and not a target.
 //
-// TRADE-OFF, know it before you "fix" it: because this IS the lyrics field, the
-// model sometimes vocalises its contents — the coast track has faint wordless
-// singing that is almost certainly it interpreting "(instrumental)". Emptying
-// the section bodies would probably stop that, but risks reverting to 14-second
-// tracks, so it is left alone until someone tests the alternative properly.
-const STRUCTURE = `[Intro]
+// The section TAGS are the whole trick. The bodies are not, and they used to cost
+// us: the model sings whatever is in the lyrics slot, and the first coast track
+// had faint wordless vocals that were almost certainly it performing the word
+// "instrumental". That was left alone for a while because emptying the bodies was
+// assumed to risk the 14-second failure. Measured 2026-08-15, identical seed 8836
+// and identical caption, only the bodies differing:
+//
+//     [Intro] + "(instrumental)"  ->  66.0s
+//     [Intro] + nothing           ->  100.0s   (the full max_duration)
+//
+// So the assumption was wrong, and empty bodies are now the default. WORDED is
+// kept because jungle and title were rendered with it and re-rolling music the
+// kid already knows is a real cost, not a free consistency win.
+const WORDED = `[Intro]
 (instrumental)
 
 [Theme A]
@@ -52,39 +59,62 @@ const STRUCTURE = `[Intro]
 [Outro]
 (instrumental)`;
 
+// The default: the same tags, no bodies. Pass `structure: WORDED` on a track to
+// go back to the old form.
+const STRUCTURE = WORDED.replace(/\(instrumental\)\n?/g, '');
+
 export const TRACKS = {
+  // structure: WORDED pinned so a re-render reproduces the track that shipped —
+  // this is music the kid already knows.
   jungle: {
-    seconds: 100, seed: 7412,
+    seconds: 100, seed: 7412, structure: WORDED,
     caption: `Global Metadata: Upbeat orchestral video-game platformer theme, playful jungle adventure. 132 BPM, C major. Instrumental, no vocals, no singing.
 Bright marimba and xylophone lead melody, tribal hand percussion, congas and shakers, warm pizzicato strings, cheerful muted brass stabs, light flute countermelody.
 Bouncy, sunny, energetic, family-friendly, classic Nintendo platformer energy. Clean loop, consistent tempo throughout.`,
   },
-  // TODO: flagged for replacement — the loop is clean but the piece itself is
-  // off, and it has faint wordless vocals (see the STRUCTURE note above).
-  // Re-roll with a different seed and a caption that leans harder on
-  // "purely instrumental, no voice, no choir".
+  // Re-rolled 2026-08-15: the 2291 take had faint wordless singing and a piece
+  // that never settled. New seed, and the caption now spends three separate
+  // clauses saying no voice — one mention was evidently not enough weight.
   coast: {
-    seconds: 100, seed: 2291,
-    caption: `Global Metadata: Breezy tropical video-game beach level theme. 124 BPM, F major. Instrumental, no vocals, no singing.
-Steel drums, ukulele, light surf guitar, soft brass pads, gentle bongo and shaker groove, warm sea-air synth pad.
-Relaxed but forward-moving, sunny, playful, holiday feeling. Clean loop, consistent tempo throughout.`,
+    seconds: 100, seed: 8836,
+    caption: `Global Metadata: Breezy tropical video-game beach level theme. 124 BPM, F major. Purely instrumental. No vocals, no singing, no voice, no choir, no humming, no vocal pads.
+Steel drum lead melody, bright ukulele strumming, clean surf guitar, warm brass pads, bongo and shaker groove, soft synth pad.
+Relaxed but forward-moving, sunny, playful, holiday feeling. Strong memorable melody. Clean loop, consistent tempo throughout.`,
+  },
+  frost: {
+    seconds: 100, seed: 3390,
+    caption: `Global Metadata: Sparkling icy mountain level theme for a children's video game. 118 BPM, A major. Purely instrumental. No vocals, no singing, no voice, no choir.
+Crystalline glockenspiel and celesta lead, icy tubular bells, light pizzicato strings, soft clarinet countermelody, brushed snare and shaker, gentle timpani swells.
+Crisp, wintry, adventurous and warm rather than cold, family-friendly. Clean loop, consistent tempo throughout.`,
+  },
+  reef: {
+    seconds: 100, seed: 6174,
+    caption: `Global Metadata: Dreamy underwater coral reef level theme for a children's video game. 104 BPM, D major. Purely instrumental. No vocals, no singing, no voice, no choir.
+Warm marimba melody, rolling harp arpeggios, mellow flute countermelody, deep round bass, soft mallet percussion, wide shimmering reverb pad, occasional bubbling chimes.
+Floating, calm, curious, gently swaying, family-friendly. Clean loop, consistent tempo throughout.`,
+  },
+  cosmic: {
+    seconds: 110, seed: 4271,
+    caption: `Global Metadata: Driving cosmic rocket-flight finale theme for a children's space platformer. 138 BPM, E minor to E major. Purely instrumental. No vocals, no singing, no voice, no choir.
+Heroic brass melody, fast arpeggiated synth, punchy timpani and taiko, soaring strings, sparkling bell accents, energetic rock drum kit.
+Triumphant, urgent, high-stakes final-level energy that resolves major at the end. Clean loop, consistent tempo throughout.`,
   },
   title: {
-    seconds: 70, seed: 5150,
+    seconds: 70, seed: 5150, structure: WORDED,   // as shipped; see jungle
     caption: `Global Metadata: Heroic cosmic main-theme fanfare for a children's space platformer. 120 BPM, D major. Instrumental, no vocals, no singing.
 Big triumphant brass fanfare, sparkling celesta and glockenspiel, sweeping strings, rolling timpani, twinkling bells.
 Wondrous, adventurous, uplifting, cinematic title-screen energy. Clean loop.`,
   },
 };
 
-function graph({ caption, seconds, seed }, prefix) {
+function graph({ caption, seconds, seed, structure }, prefix) {
   return {
     1: { class_type: 'UNETLoader', inputs: { unet_name: 'minimax_music3_dit_fp16.safetensors', weight_dtype: 'default' } },
     2: { class_type: 'CLIPLoader', inputs: { clip_name: 'minimax_music3_text_encoder_pruned_int8_convrot.safetensors', type: 'minimax', device: 'default' } },
     3: { class_type: 'VAELoader', inputs: { vae_name: 'minimax_music3_dav.safetensors' } },
     4: {
       class_type: 'MiniMaxMusic3TextEncode',
-      inputs: { clip: ['2', 0], caption, lyrics: STRUCTURE, seed, max_duration: seconds, cfg_scale: 1.7, top_k: 50 },
+      inputs: { clip: ['2', 0], caption, lyrics: structure ?? STRUCTURE, seed, max_duration: seconds, cfg_scale: 1.7, top_k: 50 },
     },
     5: { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['4', 0] } },
     // seconds comes from the text encode, not the widget — the latent length

@@ -67,6 +67,9 @@ const SFX = {
   crate: () => { noise(.20, .16, 900, 180, .8); tone('triangle', 260, 120, .14, .10); },
   spring: () => { tone('sine', 240, 1150, .22, .20); tone('sine', 360, 1550, .22, .10, .02); },
   stomp: () => tone('sawtooth', 700, 140, .18, .14),
+  // Underwater: a muffled thump and a bubble, not the crisp airy hop.
+  stroke: () => { tone('sine', 260, 430, .16, .13); noise(.14, .035, 320, 900, 2.4); },
+  thrust: () => noise(.34, .09, 180, 620, .7),
   stompland: () => { tone('sine', 120, 45, .22, .24); noise(.18, .14, 300, 90, .7); },
   spin: () => noise(.30, .10, 500, 2600, 1.4),
   hurt: () => { tone('sawtooth', 400, 120, .28, .18); tone('square', 300, 90, .30, .10, .04); },
@@ -82,7 +85,7 @@ export function sfx(name) { SFX[name]?.(); }
 // Add an id here once assets/audio/<id>.mp3 exists. Missing files stay silent
 // rather than throwing — the game must never fail to start over a soundtrack.
 // Generated locally by tools/genmusic.js (MiniMax Music 3 on the 4090).
-export const TRACKS = new Set(['jungle', 'coast', 'title']);
+export const TRACKS = new Set(['jungle', 'coast', 'frost', 'reef', 'cosmic', 'title']);
 
 /**
  * Play a track. Runs 0..loopEnd once — the intro — then repeats

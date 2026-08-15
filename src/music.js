@@ -7,11 +7,23 @@ export const LOOPS = {
     "loopEnd": 54.8624
   },
   "coast": {
-    "loopStart": 47.6241,
-    "loopEnd": 94.4376
+    "loopStart": 34.8996,
+    "loopEnd": 59.3602
   },
   "title": {
     "loopStart": 4.9923,
     "loopEnd": 24.2047
+  },
+  "cosmic": {
+    "loopStart": 32.3918,
+    "loopEnd": 67.6264
+  },
+  "frost": {
+    "loopStart": 25.542,
+    "loopEnd": 57.464
+  },
+  "reef": {
+    "loopStart": 30.7897,
+    "loopEnd": 91.3093
   }
 };
