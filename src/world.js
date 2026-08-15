@@ -343,6 +343,9 @@ const SPLASH = {
 };
 
 /* ---------------------------------------------------------------- crates */
+// TODO (playtest): these differ only by tint, so the bonus crate and the
+// springboard are not distinguishable at a glance. They need distinct faces —
+// a star stencil, a cat, a spring/arrow — and ideally distinct silhouettes.
 export const CRATE = {
   plain: { stars: 1, tint: 0xffffff },
   star: { stars: 5, tint: 0xffe9a8 },

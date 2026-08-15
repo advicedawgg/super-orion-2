@@ -100,6 +100,23 @@ and has to be downloaded.
 
 ## Status
 
+**Live at [orion2.advicedawg.com](https://orion2.advicedawg.com)**, and fronted by the launcher menu at
+[orion.advicedawg.com](https://orion.advicedawg.com).
+
 Playable end to end: 2 levels, 98 collectable stars, 4 crate types, 3 enemy types, moving platforms,
-checkpoints, lives, spin/stomp/double-jump, and a generated soundtrack. Underwater and jetpack levels
-are the next mechanics.
+checkpoints, lives, spin/ground-pound/double-jump, generated textures and a generated soundtrack.
+
+## Next
+
+From playtesting, in rough priority order:
+
+1. **Levels need to be a lot longer.** Orion is good at games and the current two are short. This is
+   the main gap — more length and more ideas per level, not more levels.
+2. **Crates need to differ by more than a tint.** `plain`, `star`, `life` and `spring` currently share
+   one texture and only vary `tint` in `CRATE` (src/world.js), so you can't tell the bonus crate from
+   the bouncy one at a glance. They want distinct faces — a star stencil, a cat, an arrow/spring —
+   and ideally distinct silhouettes.
+3. Replace the Crumble Coast track. The loop is clean but the piece is off, and it has faint wordless
+   vocals (see the STRUCTURE note in `tools/genmusic.js`).
+4. Underwater and jetpack levels — both are new camera rigs on the existing engine, which is why the
+   camera was built the way it was.
