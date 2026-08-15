@@ -1,0 +1,11 @@
+{
+  "name": "super-orion-2",
+  "private": true,
+  "description": "Super Orion 2 — Cosmic Cannonball. A 3D platformer in three.js. No build step.",
+  "type": "module",
+  "scripts": {
+    "dev": "http-server -p 8791 -c-1",
+    "check": "node tools/check.js && node src/physics.js",
+    "deploy": "wrangler deploy"
+  }
+}

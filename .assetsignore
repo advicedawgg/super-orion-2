@@ -1,0 +1,13 @@
+# Only the game ships to the website — keep dev tooling off it.
+.git
+.gitignore
+.assetsignore
+.claude
+.playwright-mcp
+.wrangler
+node_modules
+tools
+AGENTS.md
+README.md
+package.json
+wrangler.jsonc
