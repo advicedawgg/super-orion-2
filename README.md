@@ -111,7 +111,16 @@ checkpoints, lives, spin/ground-pound/double-jump, generated textures and a gene
 From playtesting, in rough priority order:
 
 1. **Levels need to be a lot longer.** Orion is good at games and the current two are short. This is
-   the main gap — more length and more ideas per level, not more levels.
+   the main gap — more length and more ideas per level, not just more levels.
+
+   Concretely: Jungle Jog runs z 18 → −187, about **205 units**, which is roughly a minute of play.
+   Aim for **3–4× that**, and more importantly a new *idea* every 30–40 units rather than a longer
+   corridor of the same thing. The level already shows the pattern to extend — flat tutorial ground,
+   then gaps, then crates and the double jump, then hazards and movers, then a run home — so add
+   more distinct beats between the checkpoints instead of stretching the existing ones.
+
+   `node tools/check.js` prints each level's solid/star/crate/enemy counts, which is the quickest way
+   to see whether a level actually grew or just got longer.
 2. **Crates need to differ by more than a tint.** `plain`, `star`, `life` and `spring` currently share
    one texture and only vary `tint` in `CRATE` (src/world.js), so you can't tell the bonus crate from
    the bouncy one at a glance. They want distinct faces — a star stencil, a cat, an arrow/spring —
