@@ -354,6 +354,38 @@ export function crateFace(kind) {
   return faceCache.get(kind);
 }
 
+/**
+ * A portal placard for the hub: level name over a star tally, on a rounded
+ * plate tinted to that level's sky. Drawn rather than modelled because text is
+ * the one thing ~30 boxes cannot do, and a kid picking a level needs to read
+ * which one it is without a manual.
+ */
+export function signTexture(title, sub, accent = 0x2f6fdc) {
+  const W = 512, H = 176;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  const col = `#${(accent & 0xffffff).toString(16).padStart(6, '0')}`;
+  const round = (x, y, w, h, r) => {
+    g.beginPath();
+    g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r); g.closePath();
+  };
+  g.clearRect(0, 0, W, H);
+  round(6, 6, W - 12, H - 12, 26); g.fillStyle = 'rgba(10,14,30,.88)'; g.fill();
+  g.lineWidth = 9; g.strokeStyle = col; g.stroke();
+  g.textAlign = 'center';
+  g.fillStyle = '#ffffff';
+  g.font = 'bold 54px system-ui,-apple-system,"Segoe UI",sans-serif';
+  g.fillText(title, W / 2, 76, W - 60);
+  g.fillStyle = '#ffd23f';
+  g.font = 'bold 40px system-ui,-apple-system,"Segoe UI",sans-serif';
+  g.fillText(sub, W / 2, 132, W - 60);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 /* ---------------------------------------------------------------- loading */
 const cache = new Map();
 const loader = new THREE.TextureLoader();

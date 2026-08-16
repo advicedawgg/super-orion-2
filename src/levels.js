@@ -1475,3 +1475,52 @@ export const LEVELS = [
 ];
 
 export const byId = id => LEVELS.find(l => l.id === id);
+
+/**
+ * The hub. Not in LEVELS — you never "play" it and it has no goal; it is the
+ * place you stand between levels, which is the thing the game was missing.
+ * Reaching Cosmic Cannonball used to mean playing four levels first, so the
+ * last level got tested least, by everyone, including the person it is for.
+ *
+ * `hub: true` tells tools/check.js to skip the goal and the jump-arc flood
+ * fill and still run every geometry check, because this is authored the same
+ * way everything else is and gets the same class of mistake.
+ */
+export const HUB = {
+  id: 'hub', name: 'Star Island', hub: true,
+  sky: [0x4aa8ff, 0xdff1ff], fog: [0xd6ecff, 60, 210],
+  sun: 0xfff4dd, sunDir: [-0.4, 1, 0.55], amb: 0x4e6a48,
+  camYaw: 0, camOff: [0, 7.0, 14], start: [0, 0, 8],
+  hint: 'Walk into a ring to play that level!',
+  build(B) {
+    B.ground(-12, 'water');                         // the island sits in the sea
+    // Deep enough that the camera never sails off the back of it: at the spawn
+    // the boom sits at z+14, and an island ending at z 16 put its own cliff
+    // face across the bottom half of the screen.
+    B.floor(0, 0, -3, 36, 48, 'grass');             // x -18..18, z -27 .. 21
+
+    // The five doorways, in an arc so none of them hides behind another and
+    // the camera — which is fixed — sees the whole set from the spawn.
+    B.portal(-14, 0, -4, 0);
+    B.portal(-7.5, 0, -11, 1);
+    B.portal(0, 0, -13.5, 2);
+    B.portal(7.5, 0, -11, 3);
+    B.portal(14, 0, -4, 4);
+
+    // Something to look at, and a reason the island reads as a place. All of
+    // it is clear of the walking line between the spawn and the arc.
+    // No stars out here: a star you can collect on the map that counts for
+    // nothing and never comes back is a promise the hub cannot keep.
+    for (const [x, z, s] of [[-16.5, 14, .9], [16.5, 14, .85], [-17, 6, .8], [17, 6, .75],
+                             [-16, -20, .8], [16, -20, .85], [-8, 18, .7], [8, 18, .7]])
+      B.tree(x, 0, z, s);
+    B.wall(-16, 2.2, -12, 4, 4, 2.2, 'rock');
+    B.wall(16, 2.2, -12, 4, 4, 2.2, 'rock');
+
+    // Distant palms on the water, never solid.
+    for (let z = 20; z > -60; z -= 14) {
+      B.tree(-34 + (z % 6), -12, z, 2.0, false);
+      B.tree(35 + (z % 5), -12, z - 6, 2.2, false);
+    }
+  },
+};

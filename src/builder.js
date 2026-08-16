@@ -113,6 +113,9 @@ class Builder {
    */
   ground(y, tex = 'grass', size = 420) { this.o.ground = { y, tex, size }; }
 
+  /** A doorway into level `level` (an index into LEVELS). Hub world only. */
+  portal(x, y, z, level) { this.o.portals.push({ x, y, z, level }); }
+
   enemy(kind, x, y, z, opt = {}) { this.o.enemies.push({ kind, x, y, z, opt }); }
   checkpoint(x, y, z) { this.o.checkpoints.push({ x, y, z }); }
   goal(x, y, z) { this.o.goal = { x, y, z }; }
@@ -126,7 +129,7 @@ class Builder {
 
 /** Run a level definition's build() and return its plain data. */
 export function buildLevel(def) {
-  const out = { solids: [], movers: [], stars: [], crates: [], enemies: [], checkpoints: [], goal: null, trees: [], ground: null };
+  const out = { solids: [], movers: [], stars: [], crates: [], enemies: [], checkpoints: [], goal: null, trees: [], ground: null, portals: [] };
   def.build(new Builder(out));
   for (const c of out.crates) out.solids.push(crateSolid(c));
   for (const t of out.trees) if (t.solid) out.solids.push(trunkSolid(t));

@@ -102,6 +102,33 @@ what is ahead of him is not on the segment.
 Consequence worth knowing: a hidden mesh casts no shadow, so a big slab's shadow pops as it is cut
 away. That is cheaper than being blind.
 
+## The hub
+
+`HUB` in `src/levels.js` is the map you stand on between levels — authored with the same
+Builder, checked by the same gate (`def.hub` only turns off "must have a goal" and the
+jump-arc flood fill). `B.portal(x, y, z, level)` is a doorway; walking into it plays that
+level. There is no unlock gating on purpose: the last level used to be the least-tested
+thing in the game because reaching it meant playing four others first.
+
+Flow is now hub-shaped rather than linear. A level ends by returning you to the map, best
+stars per level are saved under `lv` in the save file, and running out of lives is not a
+game over any more — it drops you back on the map with your bests intact. `G.inHub` is what
+tells the HUD, the pause card and ↓ which world they are in.
+
+## Crates fall
+
+A crate with nothing under it drops until something catches it (`settleCrates` in
+`world.js`). Smash the bottom of a stack and the rest comes down, which is the entire point
+of a stack; before this they hung in mid-air.
+
+Support is a footprint OVERLAP test, not a centre-point test. A pyramid's upper crates
+straddle the gap between the two below them, so a centre test says "nothing under me" and
+drops the whole pyramid the moment the level loads. Only crates flagged `settling` are
+tested and they stop being restless once they land, so the usual cost is nothing.
+
+`check.js` now fails a crate authored over thin air, because "floating crate" has stopped
+being a visible mistake and become a crate that silently relocates on load.
+
 ## Level authoring
 
 Levels are `build(B)` functions in `src/levels.js` run against the Builder.

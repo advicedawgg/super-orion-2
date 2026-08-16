@@ -134,9 +134,13 @@ and has to be downloaded.
 **Live at [orion2.advicedawg.com](https://orion2.advicedawg.com)**, and fronted by the launcher menu at
 [orion.advicedawg.com](https://orion.advicedawg.com).
 
-Playable end to end: **5 levels across 2 worlds, 844 collectable stars**, 4 crate types, 5 enemy types,
-moving platforms, checkpoints, lives, spin/ground-pound/double-jump, **swimming and a jetpack**,
-generated textures and a full generated soundtrack with real loop points.
+Playable end to end: a **hub island** you pick levels from, **5 levels across 2 worlds, 844 collectable
+stars**, 4 crate types, 5 enemy types, moving platforms, checkpoints, lives,
+spin/ground-pound/double-jump, **swimming and a jetpack**, generated textures and a full generated
+soundtrack with real loop points.
+
+Every level is playable from the map straight away, and your best star count per level is saved and
+shown on its placard. Running out of lives puts you back on the map rather than ending a run.
 
 | # | Level | Length | ⭐ | |
 |---|---|---|---|---|
@@ -164,7 +168,5 @@ What is worth doing next, in rough priority order:
    reasoned rather than heard — an audio model was tried and failed its control (`AGENTS.local.md`).
    `frost.mp3` was re-rolled on 2026-08-16 (seed 4410, cfg 2.6) after three takes that sang; it now
    measures cleaner than any other track in the game, but nobody has heard the new one yet.
-3. **A level-select screen.** Game 1 has one; here, reaching Cosmic Cannonball means playing four
-   levels first, which is a lot to ask when you want to test the last one.
 5. Backdrop trees are the mesh budget: Jungle Jog draws ~1470 meshes against ~800 for the others.
    Fine on a desktop GPU, and it is the first thing to instance if the Steam Deck struggles.

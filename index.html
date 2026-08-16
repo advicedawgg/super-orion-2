@@ -30,6 +30,8 @@
           transform-origin:left;transition:background .2s}
   #tank[data-kind="jet"] i{background:#ffb03a}
   #tank.low i{background:#ff5d73}
+  /* The map has no hearts to lose and no lives to spend. */
+  #hud.hub #hearts,#hud.hub #lives,#hud.hub #tank{display:none}
   #stars{color:var(--gold)}
   #lives{color:var(--cool)}
   #toast{position:fixed;left:50%;top:22%;transform:translateX(-50%) scale(.8);opacity:0;

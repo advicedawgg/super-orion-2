@@ -45,6 +45,12 @@ frame for the whole coyote window. None of those were visible in the diff.
   between it and him. Do not replace that with a shorter boom — the corridor walls are
   56u wide and pulling in parks the camera inside one. See AGENTS.md.
 
+- The game is **hub-shaped**: `HUB` in `src/levels.js` is a real Builder level with
+  `B.portal()` doorways, and levels return you to it. Don't reintroduce the linear
+  "next level" chain — the map is why the flight level finally gets played.
+- **Crates fall** when unsupported. Support is a footprint overlap, never a centre
+  point, or every pyramid collapses on load.
+
 ## Running it
 
 ```sh
