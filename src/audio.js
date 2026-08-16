@@ -71,7 +71,15 @@ const SFX = {
   stroke: () => { tone('sine', 260, 430, .16, .13); noise(.14, .035, 320, 900, 2.4); },
   thrust: () => noise(.34, .09, 180, 620, .7),
   stompland: () => { tone('sine', 120, 45, .22, .24); noise(.18, .14, 300, 90, .7); },
-  spin: () => noise(.30, .10, 500, 2600, 1.4),
+  // A lone bandpassed noise sweep at .10 is a "tss" you cannot hear over the
+  // music — which read as the spin having no sound at all. It needs a PITCH to
+  // carry it: a rising whoosh, a low body under it, and the noise as the air.
+  spin: () => {
+    tone('triangle', 320, 1180, .26, .17);
+    tone('sawtooth', 160, 520, .20, .07, .01);
+    noise(.26, .17, 600, 3000, .8);
+    tone('triangle', 1180, 700, .10, .09, .20);   // the flick out of the turn
+  },
   hurt: () => { tone('sawtooth', 400, 120, .28, .18); tone('square', 300, 90, .30, .10, .04); },
   checkpoint: () => [0, 1, 2].forEach(i => tone('triangle', [523, 659, 784][i], [523, 659, 784][i], .22, .15, i * .09)),
   life: () => [0, 1, 2, 3].forEach(i => tone('square', [523, 659, 784, 1047][i], [523, 659, 784, 1047][i], .18, .14, i * .07)),

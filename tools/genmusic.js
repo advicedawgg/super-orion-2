@@ -63,6 +63,14 @@ const WORDED = `[Intro]
 // go back to the old form.
 const STRUCTURE = WORDED.replace(/\(instrumental\)\n?/g, '');
 
+// What we are steering AWAY from. Every caption in TRACKS says "no vocals" and
+// for frost it sang anyway, twice, on two different seeds — because until now
+// the negative conditioning was zeroed out and there was nothing to steer away
+// FROM. Describe the unwanted thing positively here; that is how CFG reads it.
+const NEGATIVE = `Global Metadata: A song with a lead singer. Female vocalist singing words, male vocalist singing words, pop vocal performance.
+Sung lyrics, verses and a chorus with words, lead vocal melody, backing vocals, harmonised voices, choir, humming, wordless vowel singing, ooh and aah vocal pads, spoken word, rap.
+The human voice is the main instrument and it is mixed loud and in front.`;
+
 export const TRACKS = {
   // structure: WORDED pinned so a re-render reproduces the track that shipped —
   // this is music the kid already knows.
@@ -81,11 +89,30 @@ Bouncy, sunny, energetic, family-friendly, classic Nintendo platformer energy. C
 Steel drum lead melody, bright ukulele strumming, clean surf guitar, warm brass pads, bongo and shaker groove, soft synth pad.
 Relaxed but forward-moving, sunny, playful, holiday feeling. Strong memorable melody. Clean loop, consistent tempo throughout.`,
   },
+  // Re-rolled three times, 2026-08-15/16, because it kept SINGING — a woman,
+  // indistinct words. Rewording the caption did nothing: seeds 3390, 5821, 2077
+  // and 9012 all sang with "no vocals" said seven different ways.
+  //
+  // What actually worked, measured with tools/vocalcheck.py (ratio = vocal-stem
+  // energy over instrumental-stem energy, so lower is cleaner):
+  //
+  //     seed 2077, cfg 1.7, zeroed negative   +2.3 dB   sings
+  //     seed 2077, cfg 1.7, real negative     +0.7 dB   sings
+  //     seed 9012, cfg 2.6, real negative     +0.5 dB   sings
+  //     seed 1337, cfg 3.4, real negative     -8.3 dB   borderline
+  //     seed 4410, cfg 2.6, real negative    -48.7 dB   SHIPPED
+  //
+  // So: the seed dominates, the negative and a higher cfg help, and the only
+  // reliable move is to roll several and MEASURE. Every other track scores
+  // between -10 and -36 dB, so -48.7 is cleaner than anything else in the game.
+  //
+  // Seed also decides LENGTH: 5821 stopped at 44.7s, 2077 ran the full 100s
+  // ceiling, this one lands at 66s. All are fine; check it before judging.
   frost: {
-    seconds: 100, seed: 3390,
-    caption: `Global Metadata: Sparkling icy mountain level theme for a children's video game. 118 BPM, A major. Purely instrumental. No vocals, no singing, no voice, no choir.
-Crystalline glockenspiel and celesta lead, icy tubular bells, light pizzicato strings, soft clarinet countermelody, brushed snare and shaker, gentle timpani swells.
-Crisp, wintry, adventurous and warm rather than cold, family-friendly. Clean loop, consistent tempo throughout.`,
+    seconds: 100, seed: 4410, cfg: 2.6,
+    caption: `Global Metadata: Sparkling icy mountain level theme for a children's video game. 118 BPM, A major. Purely instrumental. No vocals, no singing, no voice, no choir, no humming, no vocal pads, no lyrics.
+Crystalline glockenspiel and celesta lead, icy tubular bells, light pizzicato strings, warm french horn countermelody, brushed snare and shaker, gentle timpani swells.
+Crisp, wintry, adventurous and warm rather than cold, family-friendly. Strong memorable melody. Instrumental only — every part is played, none of it is sung. Clean loop, consistent tempo throughout.`,
   },
   reef: {
     seconds: 100, seed: 6174,
@@ -107,7 +134,8 @@ Wondrous, adventurous, uplifting, cinematic title-screen energy. Clean loop.`,
   },
 };
 
-function graph({ caption, seconds, seed, structure }, prefix) {
+function graph(spec, prefix) {
+  const { caption, seconds, seed, structure } = spec;
   return {
     1: { class_type: 'UNETLoader', inputs: { unet_name: 'minimax_music3_dit_fp16.safetensors', weight_dtype: 'default' } },
     2: { class_type: 'CLIPLoader', inputs: { clip_name: 'minimax_music3_text_encoder_pruned_int8_convrot.safetensors', type: 'minimax', device: 'default' } },
@@ -116,7 +144,19 @@ function graph({ caption, seconds, seed, structure }, prefix) {
       class_type: 'MiniMaxMusic3TextEncode',
       inputs: { clip: ['2', 0], caption, lyrics: structure ?? STRUCTURE, seed, max_duration: seconds, cfg_scale: 1.7, top_k: 50 },
     },
-    5: { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['4', 0] } },
+    // The NEGATIVE prompt. This slot used to be ConditioningZeroOut — an empty
+    // negative, so CFG was pushing away from nothing at all while every caption
+    // in TRACKS politely asked for no vocals.
+    //
+    // Worth knowing how much it is actually worth, measured with
+    // tools/vocalcheck.py on the SAME seed (2077): zeroed-out negative scored
+    // +2.3 dB of vocals over the instrumental, this negative +0.7 dB. Real, and
+    // nowhere near enough on its own — the seed dominates. It is kept because
+    // it costs nothing and it helps; it is not the fix on its own.
+    5: {
+      class_type: 'MiniMaxMusic3TextEncode',
+      inputs: { clip: ['2', 0], caption: NEGATIVE, lyrics: structure ?? STRUCTURE, seed, max_duration: seconds, cfg_scale: 1.7, top_k: 50 },
+    },
     // seconds comes from the text encode, not the widget — the latent length
     // must match the conditioning the model actually produced.
     6: { class_type: 'EmptyMiniMaxMusic3LatentAudio', inputs: { seconds: ['4', 1], batch_size: 1 } },
@@ -124,7 +164,7 @@ function graph({ caption, seconds, seed, structure }, prefix) {
       class_type: 'KSampler',
       inputs: {
         model: ['1', 0], positive: ['4', 0], negative: ['5', 0], latent_image: ['6', 0],
-        seed, steps: 30, cfg: 1.7, sampler_name: 'euler', scheduler: 'simple', denoise: 1,
+        seed, steps: 30, cfg: spec.cfg ?? 1.7, sampler_name: 'euler', scheduler: 'simple', denoise: 1,
       },
     },
     8: { class_type: 'VAEDecodeAudio', inputs: { samples: ['7', 0], vae: ['3', 0] } },
@@ -174,10 +214,17 @@ async function generate(name, spec) {
 // kicking off a two-hour render.
 if (process.argv[1]?.endsWith('genmusic.js')) {
   const want = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(TRACKS);
+  // SEED=1234 overrides the pinned seed for one run, so candidates can be
+  // screened by tools/vocalcheck.py without editing TRACKS between every roll.
+  // Pin the winner back into TRACKS afterwards — a track you cannot reproduce
+  // is a track you cannot fix.
+  const seed = process.env.SEED ? Number(process.env.SEED) : null;
+  const cfg = process.env.CFG ? Number(process.env.CFG) : null;
   for (const name of want) {
     if (!TRACKS[name]) { console.error(`no such track: ${name} (have ${Object.keys(TRACKS).join(', ')})`); process.exit(1); }
-    console.log(`\n── ${name}`);
-    await generate(name, TRACKS[name]);
+    console.log(`\n── ${name}${seed ? `  (seed override ${seed})` : ''}`);
+    const spec = { ...TRACKS[name], ...(seed ? { seed } : {}), ...(cfg ? { cfg } : {}) };
+    await generate(name, spec);
   }
   console.log('\nRemember: add each id to TRACKS in src/audio.js or the game stays silent.');
 }

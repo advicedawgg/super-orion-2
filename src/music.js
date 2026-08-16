@@ -19,8 +19,8 @@ export const LOOPS = {
     "loopEnd": 67.6264
   },
   "frost": {
-    "loopStart": 25.542,
-    "loopEnd": 57.464
+    "loopStart": 13.3979,
+    "loopEnd": 35.8708
   },
   "reef": {
     "loopStart": 30.7897,
