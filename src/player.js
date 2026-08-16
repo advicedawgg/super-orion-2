@@ -1,7 +1,7 @@
 // Orion: ~30 boxes, one 256px atlas, animated by rotating limb groups.
 // Exactly how an N64 character was built, minus the skinning.
 import * as THREE from 'three';
-import { T, step, jumpStep, jumpCut, thrustStep, tuning, isFreeMode } from './physics.js';
+import { T, step, jumpStep, jumpCut, thrustStep, tankStep, tuning, isFreeMode, hasTank } from './physics.js';
 import { tex } from './art.js';
 import * as In from './input.js';
 
@@ -66,8 +66,30 @@ export function buildOrion() {
     const shoe = part(.24, .12, .30, F(SHOE), mat); shoe.position.set(0, -.52, .04); g.add(shoe);
   }
 
+  // Dive gear. Hidden on land; setMode('swim') switches it on. The reef is a
+  // DIVE, not a swim — and a brass helmet is the one silhouette that says so
+  // from behind, which is the only angle the camera ever gives you.
+  const scuba = new THREE.Group(); scuba.visible = false; body.add(scuba);
+  const brass = new THREE.MeshLambertMaterial({ color: 0xd8a038 });
+  const glass = new THREE.Mesh(new THREE.SphereGeometry(.42, 12, 10),
+    new THREE.MeshLambertMaterial({ color: 0x9fe8ff, emissive: 0x123f4d, transparent: true, opacity: .40 }));
+  glass.position.y = 1.22; scuba.add(glass);
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(.31, .075, 6, 14), brass);
+  collar.rotation.x = Math.PI / 2; collar.position.y = 1.00; scuba.add(collar);
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(.14, .18, .12, 8), brass);
+  crown.position.y = 1.62; scuba.add(crown);
+  for (const s of [-1, 1]) {
+    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(.075, .075, .14, 6), brass);
+    bolt.rotation.z = Math.PI / 2; bolt.position.set(s * .40, 1.22, 0); scuba.add(bolt);
+  }
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(.17, .17, .70, 8),
+    new THREE.MeshLambertMaterial({ color: 0xd13b4a }));
+  tank.position.set(0, .74, -.32); scuba.add(tank);
+  const hose = new THREE.Mesh(new THREE.TorusGeometry(.16, .035, 5, 10, Math.PI), brass);
+  hose.position.set(0, 1.02, -.22); hose.rotation.set(Math.PI / 2, 0, 0); scuba.add(hose);
+
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  return { root, body, head, torso, armL, armR, legL, legR };
+  return { root, body, head, torso, armL, armR, legL, legR, scuba };
 }
 
 /* --------------------------------------------------------------- player */
@@ -115,14 +137,19 @@ export class Player {
     this.ceilY = ceilY;
     this.thrusting = false;
     this.jetFx.visible = false;
+    this.tank = 1;
+    this.rig.scuba.visible = mode === 'swim';
   }
+
+  /** True when this mode meters its lift — main.js shows the gauge for it. */
+  get metered() { return hasTank(this.t); }
 
   reset(at) {
     this.pos.copy(at); this.vel.set(0, 0, 0);
     this.grounded = false; this.coyote = 0; this.buffer = 0; this.jumps = 0;
     this.spinT = 0; this.spinCd = 0; this.hurtT = 0; this.stomping = false;
     this.squash = 0; this.stride = 0; this.airT = 0; this.cutting = false;
-    this.thrusting = false; this.jetFx.visible = false;
+    this.thrusting = false; this.jetFx.visible = false; this.tank = 1;
     this.rig.root.position.copy(at);
     this.rig.root.visible = true;
   }
@@ -190,6 +217,7 @@ export class Player {
       if (this.stomping) { this.stomping = false; this.squash = 1; this.fire('stompland'); }
       this.airT = 0;
     } else this.airT += dt;
+    tankStep(this, dt, t);
 
     this.hurtT = Math.max(0, this.hurtT - dt);
     this.animate(dt, mag);

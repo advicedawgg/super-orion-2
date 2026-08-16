@@ -19,8 +19,17 @@
   #hud{padding:clamp(8px,2vmin,20px);display:flex;justify-content:space-between;align-items:flex-start;
        text-shadow:0 3px 0 rgba(0,0,0,.55);font-size:clamp(16px,3.2vmin,34px)}
   #hud .grp{display:flex;gap:.55em;align-items:center}
+  #hearts{display:flex;gap:.55em;align-items:center}
   #hearts span{filter:drop-shadow(0 2px 0 rgba(0,0,0,.4))}
   #hearts span.gone{opacity:.22;filter:grayscale(1)}
+  /* Air (reef) / fuel (cosmic). Only shown in a mode that meters lift. */
+  #tank{display:none;width:clamp(64px,13vmin,150px);height:.55em;border-radius:.3em;
+        background:rgba(0,0,0,.42);box-shadow:0 0 0 .12em rgba(0,0,0,.45)}
+  #tank.on{display:block}
+  #tank i{display:block;height:100%;border-radius:.3em;background:var(--cool);
+          transform-origin:left;transition:background .2s}
+  #tank[data-kind="jet"] i{background:#ffb03a}
+  #tank.low i{background:#ff5d73}
   #stars{color:var(--gold)}
   #lives{color:var(--cool)}
   #toast{position:fixed;left:50%;top:22%;transform:translateX(-50%) scale(.8);opacity:0;
@@ -78,7 +87,7 @@
 <canvas id="c"></canvas>
 
 <div id="hud" hidden>
-  <div class="grp" id="hearts"></div>
+  <div class="grp"><span id="hearts"></span><span id="tank"><i></i></span></div>
   <div class="grp"><span id="stars">⭐ 0</span><span id="lives">🐱 5</span></div>
 </div>
 <div id="toast"></div>

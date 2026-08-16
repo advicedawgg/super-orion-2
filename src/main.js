@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as In from './input.js';
 import * as Sound from './audio.js';
 import { tex } from './art.js';
+import { bounds } from './physics.js';
 import { Player } from './player.js';
 import { World, CRATE } from './world.js';
 import { LEVELS } from './levels.js';
@@ -51,32 +52,56 @@ const camPos = new THREE.Vector3(), camAim = new THREE.Vector3();
 const bits = [];
 {
   const geo = new THREE.BoxGeometry(.22, .22, .22);
-  for (let i = 0; i < 90; i++) {
+  // 150, not 90: a breath is a dozen bubbles and the reef breathes constantly,
+  // so at 90 a plume would recycle itself before it reached the surface.
+  for (let i = 0; i < 150; i++) {
     const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff }));
     m.visible = false; scene.add(m);
     bits.push({ m, v: new THREE.Vector3(), life: 0 });
   }
 }
 let bitCursor = 0;
+const nextBit = () => bits[bitCursor = (bitCursor + 1) % bits.length];
 function burst(at, color, n = 10, power = 7) {
   for (let i = 0; i < n; i++) {
-    const b = bits[bitCursor = (bitCursor + 1) % bits.length];
+    const b = nextBit();
     b.m.position.copy(at); b.m.visible = true;
     b.m.material.color.set(color);
-    b.m.scale.setScalar(0.7 + Math.random() * 0.8);
+    b.m.material.transparent = false; b.m.material.opacity = 1;
     b.v.set(Math.random() - .5, Math.random() * .9 + .3, Math.random() - .5).multiplyScalar(power);
+    b.g = 26; b.size = 0.7 + Math.random() * 0.8; b.spin = 1;
     b.life = 0.65 + Math.random() * 0.35;
   }
 }
+/** Same pool, opposite gravity: debris falls, a diver's breath goes up. */
+function bubble(x, y, z) {
+  const b = nextBit();
+  b.m.position.set(x + (Math.random() - .5) * .55, y + (Math.random() - .5) * .3, z + (Math.random() - .5) * .55);
+  b.m.visible = true; b.m.material.color.set(0xdff6ff);
+  // Each bit owns its material, so this is a per-bubble setting, not a global.
+  b.m.material.transparent = true; b.m.material.opacity = .55;
+  b.v.set((Math.random() - .5) * .8, 1.0 + Math.random() * 0.8, (Math.random() - .5) * .8);
+  // Barely buoyant. At debris gravity (26) flipped they accelerate to 12u/s and
+  // are off the top of the screen before you see them; water is not a vacuum.
+  // These rise ~4u over their life, so the plume stays around the diver.
+  b.g = -0.8; b.size = 0.7 + Math.random() * 0.7; b.spin = 0;
+  // Staggered lifetimes stretch the puff into a plume on the way up rather
+  // than a single blob that pops all at once.
+  b.life = 0.8 + Math.random() * 1.0;
+}
+/** A breath: a proper cloud of them, not a token puff. */
+const breath = (n, x, y, z) => { for (let i = 0; i < n; i++) bubble(x, y, z); };
 function updateBits(dt) {
   for (const b of bits) {
     if (b.life <= 0) continue;
     b.life -= dt;
     if (b.life <= 0) { b.m.visible = false; continue; }
-    b.v.y -= 26 * dt;
+    b.v.y -= b.g * dt;
     b.m.position.addScaledVector(b.v, dt);
-    b.m.rotation.x += dt * 8; b.m.rotation.y += dt * 6;
-    b.m.scale.setScalar(Math.max(0.01, b.life));
+    b.m.rotation.x += dt * 8 * b.spin; b.m.rotation.y += dt * 6 * b.spin;
+    // Clamped, because a bubble outlives a spark: at life 2.2 raw it would
+    // spawn as a dinner plate and shrink. Hold size, then shrink out.
+    b.m.scale.setScalar(Math.min(1, Math.max(0.01, b.life)) * b.size);
   }
 }
 
@@ -99,12 +124,25 @@ function drawHUD() {
   $('lives').textContent = `🐱 ${G.lives}`;
 }
 
+// Air / fuel. Only shown in a mode that meters lift, because in every other
+// mode it is pinned full and a permanently-full bar is just noise.
+const tankEl = $('tank'), tankBar = tankEl.querySelector('i');
+function drawTank() {
+  tankBar.style.transform = `scaleX(${player.tank})`;
+  tankEl.classList.toggle('low', player.tank < 0.3);
+}
+
 const KEYCARD = `<div class="keys">
   <kbd>← →  ↑ ↓ / WASD</kbd><kbd>SPACE — jump ×2</kbd><kbd>X — spin</kbd>
   <kbd>C in the air — ground pound</kbd><kbd>P — pause</kbd><kbd>M — music</kbd><kbd>R — restart</kbd></div>`;
 
 /* ----------------------------------------------------------------- events */
-player.fire = name => Sound.sfx(name);
+// A stroke throws a puff of bubbles as well as a sound — underwater you should
+// be able to SEE that the button did something, not just hear it.
+player.fire = name => {
+  Sound.sfx(name);
+  if (name === 'stroke') breath(14, player.pos.x, player.pos.y + 1.5, player.pos.z);
+};
 
 function worldFx(name, at, info) {
   switch (name) {
@@ -150,6 +188,8 @@ function loadLevel(i) {
   sun.color.set(def.sun);
   sun.intensity = def.sunPower ?? 2.1;
   player.setMode(def.mode, def.ceilY ?? null);
+  tankEl.classList.toggle('on', player.metered);
+  tankEl.dataset.kind = def.mode || '';
   G.spawn.set(...def.start);
   G.runStars = 0;
   player.reset(G.spawn);
@@ -228,10 +268,59 @@ function camTarget(out) {
     .applyAxisAngle(new THREE.Vector3(0, 1, 0), def.camYaw || 0);
   return out.copy(player.pos).add(off);
 }
+/* ---- line of sight ----
+ * The camera direction is FIXED per level, so sooner or later something ends
+ * up between it and Orion: a lighthouse you walk round the back of, a tunnel
+ * roof, and above all the flight level, where the gates span the whole
+ * corridor and you are blind for most of the run. The rule is that Orion is
+ * NEVER occluded.
+ *
+ * Shortening the boom is the usual answer and it is the wrong one here: these
+ * walls are 56u wide and 4u thick, so "pull in until the line is clear" parks
+ * the camera inside the wall, or a foot from Orion's back. Instead, anything
+ * strictly BETWEEN the camera and Orion stops being drawn. It only ever hides
+ * geometry he is already level with or past — never what he is flying toward,
+ * because that is not on the segment — and it costs one slab test per solid.
+ *
+ * Solids are AABBs and we already have `bounds`, so this is a slab test
+ * against the level rather than a raycast against meshes: no BVH, no
+ * per-frame allocation, and it sees movers because they clear their own `_b`.
+ */
+const occluded = [];
+function segmentHits(from, to, s) {
+  const b = s._b || (s._b = bounds(s));
+  const p = [from.x, from.y, from.z];
+  const d = [to.x - from.x, to.y - from.y, to.z - from.z];
+  const lo = [b.x0, b.y0, b.z0], hi = [b.x1, b.y1, b.z1];
+  let t0 = 0, t1 = 1;
+  for (let a = 0; a < 3; a++) {
+    if (Math.abs(d[a]) < 1e-9) { if (p[a] < lo[a] || p[a] > hi[a]) return false; continue; }
+    let u = (lo[a] - p[a]) / d[a], v = (hi[a] - p[a]) / d[a];
+    if (u > v) { const k = u; u = v; v = k; }
+    if (u > t0) t0 = u;
+    if (v < t1) t1 = v;
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
+/** Hide whatever is standing between the camera and Orion; restore the rest. */
+function keepOrionInSight() {
+  for (const s of occluded) if (s.mesh) s.mesh.visible = true;
+  occluded.length = 0;
+  for (const s of world.solids) {
+    // Crates and tree trunks own their own meshes and are too small to blind
+    // you; only the architecture is worth cutting away.
+    if (!s.mesh) continue;
+    if (segmentHits(camAim, cam.position, s)) { s.mesh.visible = false; occluded.push(s); }
+  }
+}
+
 function snapCamera() {
   camTarget(camPos);
   camAim.copy(player.pos).setY(player.pos.y + 1.3);
   cam.position.copy(camPos); cam.lookAt(camAim);
+  keepOrionInSight();
 }
 function updateCamera(dt) {
   const want = camTarget(new THREE.Vector3());
@@ -241,12 +330,13 @@ function updateCamera(dt) {
   camPos.x = THREE.MathUtils.damp(camPos.x, want.x, 6, dt);
   camPos.z = THREE.MathUtils.damp(camPos.z, want.z, 6, dt);
   camPos.y = THREE.MathUtils.damp(camPos.y, want.y, player.grounded ? 4 : 2.2, dt);
-  cam.position.copy(camPos);
 
   camAim.x = THREE.MathUtils.damp(camAim.x, player.pos.x, 8, dt);
   camAim.y = THREE.MathUtils.damp(camAim.y, player.pos.y + 1.3, 5, dt);
   camAim.z = THREE.MathUtils.damp(camAim.z, player.pos.z, 8, dt);
+  cam.position.copy(camPos);
   cam.lookAt(camAim);
+  keepOrionInSight();
 
   // Keep the shadow frustum glued to the player or shadows blink out.
   const d = shownLevel().sunDir || [-0.5, 1, 0.6];
@@ -257,6 +347,7 @@ function updateCamera(dt) {
 
 /* ------------------------------------------------------------------- loop */
 let last = performance.now();
+let bubbleT = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
@@ -279,6 +370,13 @@ function frame(now) {
       if (In.hit('restart')) { respawn(); break; }
       const hit = player.update(dt, world.solids, LEVELS[G.level].camYaw || 0);
       player.riding = hit.grounded ? hit.ground : null;
+      if (player.metered) drawTank();
+      // A diver breathes. Idle bubbles keep the reef reading as water even when
+      // you are standing still on the bottom.
+      if (world.def.mode === 'swim' && (bubbleT -= dt) <= 0) {
+        bubbleT = 0.45 + Math.random() * 0.45;
+        breath(4, player.pos.x, player.pos.y + 1.5, player.pos.z);
+      }
       if (world.update(dt, player) === 'win') { levelClear(); break; }
       if (player.pos.y < world.killY) die(true);
       break;
@@ -335,4 +433,10 @@ async function boot() {
 }
 boot();
 
-window.__SO2 = { G, get world() { return world; }, player, cam, scene, LEVELS, THREE };
+// Debug handle. `loadLevel` is here because without it the only way to see
+// level 4 is to play levels 1-3, which makes checking anything past the jungle
+// a twenty-minute job — see AGENTS.md, "Playwright can drive it".
+window.__SO2 = {
+  G, get world() { return world; }, player, cam, scene, LEVELS, THREE,
+  goto(i) { G.level = i; loadLevel(i); G.state = 'PLAY'; hideOverlay(); drawHUD(); },
+};

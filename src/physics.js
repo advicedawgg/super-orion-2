@@ -39,23 +39,33 @@ export const MAX_RISE = (T.JUMP_V * T.JUMP_V) / (2 * T.GRAV);  // ~2.39u
 // swim and jet are FREE modes — vertical travel is unbounded, which is why
 // levels using them need a `ceilY` roof and why the checker stops trying to
 // prove reachability from a jump arc (see tools/check.js).
+//
+// Both free modes carry a TANK (a 0..1 gauge) that only refills on solid
+// ground. Without it lift is free, and a level of platforms you never have to
+// land on is not a level — you swim or fly straight over the whole thing. The
+// tank is deliberately generous: it is there to make a platform worth landing
+// on, not to make traversal a resource-management puzzle.
 export const MODES = {
   normal: {},
   swim: {
     GRAV: 11, MAXFALL: 6.5, JUMP_V: 8.6, SPEED: 7.8,
     ACCEL: 46, FRICTION: 34, AIR_CTRL: 1, CUT: 1,
-    STROKE: true,                     // press = one stroke, unlimited
+    STROKE: true,                     // press = one stroke
+    STROKE_COST: 0.125, REFILL: 0.4,  // 8 strokes a lungful; ~2.5s on the bottom
   },
   jet: {
     GRAV: 24, MAXFALL: 20, SPEED: 12,
     ACCEL: 60, FRICTION: 52, AIR_CTRL: 1,
     THRUST: 64, CLIMB: 14,            // hold-to-thrust, capped climb rate
+    BURN: 0.25, REFILL: 0.5,          // 4s of burn a tank; 2s on a perch to fill
   },
 };
 /** Tuning for a mode. Falls back to plain running for an unknown name. */
 export const tuning = mode => (MODES[mode] ? { ...T, ...MODES[mode] } : T);
 /** True when vertical travel is unbounded (stroke or thrust). */
 export const isFreeMode = t => !!(t.STROKE || t.THRUST);
+/** True when lift is metered by the tank. */
+export const hasTank = t => !!(t.BURN || t.STROKE_COST);
 
 export const bounds = s => ({
   x0: s.x - s.w / 2, x1: s.x + s.w / 2,
@@ -118,7 +128,10 @@ export function jumpStep(p, dt, pressed, t = T) {
   if (p.buffer <= 0 || p.stomping) return null;
   // Swimming: a stroke is always available, so you rise by tapping. No coyote
   // window and no jump budget — both are ideas that only mean anything on land.
+  // The lungful IS the limit: out of puff, you sink until you touch bottom.
   if (t.STROKE) {
+    if (p.tank < t.STROKE_COST) return null;
+    p.tank -= t.STROKE_COST;
     p.vel.y = t.JUMP_V; p.jumps = 0; p.cutting = false; p.buffer = 0;
     return 'stroke';
   }
@@ -146,9 +159,20 @@ export function jumpCut(p, dt, holding, t = T) {
 
 /** One frame of hold-to-thrust (jet mode). Returns true while burning. */
 export function thrustStep(p, dt, holding, t) {
-  if (!holding || p.stomping) return false;
+  if (!holding || p.stomping || p.tank <= 0) return false;
+  p.tank = Math.max(0, p.tank - t.BURN * dt);
   p.vel.y = Math.min(p.vel.y + t.THRUST * dt, t.CLIMB);
   return true;
+}
+
+/**
+ * Refuel. The tank fills ONLY on solid ground, which is the whole point: it is
+ * what makes a platform worth landing on in a mode where lift is otherwise
+ * free. Modes without a tank are pinned full so nothing else has to branch.
+ */
+export function tankStep(p, dt, t) {
+  if (!hasTank(t)) { p.tank = 1; return; }
+  if (p.grounded) p.tank = Math.min(1, p.tank + t.REFILL * dt);
 }
 
 /** Highest solid top strictly below `fromY` under (x,z), or null. */
@@ -194,7 +218,7 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('physics.js'))
   ok('groundAt finds surface', groundAt(0, 0, 5, floor) === 0);
 
   /* --- jump machine. One press must buy exactly one jump. --- */
-  const mk = () => ({ vel: { y: 0 }, grounded: true, jumps: 0, coyote: 0, buffer: 0, stomping: false, cutting: false });
+  const mk = () => ({ vel: { y: 0 }, grounded: true, jumps: 0, coyote: 0, buffer: 0, stomping: false, cutting: false, tank: 1 });
   const run = (frames, pressOn, held = () => false, t = T) => {
     const p = mk(), got = [];
     for (let i = 0; i < frames; i++) {
@@ -234,10 +258,22 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('physics.js'))
   ok('unknown mode falls back to running', tuning('nonsense') === T);
 
   // Swimming: the fourth tap must work exactly like the first. On land the
-  // third press buys nothing; that limit must not follow you into the water.
+  // third press buys nothing; that limit must not follow you into the water —
+  // only the lungful does, and six taps is well inside it.
   ev = run(80, i => i % 14 === 0, () => false, sw);
-  ok(`swim strokes never run out (got ${ev.length})`,
+  ok(`swim strokes don't run out inside a lungful (got ${ev.length})`,
     ev.length === 6 && ev.every(e => e[1] === 'stroke'));
+
+  // …but the lungful IS finite, and it refills only with your feet down.
+  const lung = mk(); lung.grounded = false;
+  let strokes = 0;
+  for (let i = 0; i < 400; i++) if (jumpStep(lung, 1 / 60, i % 12 === 0, sw)) strokes++;
+  ok(`a lungful is ${strokes} strokes then nothing`, strokes === Math.floor(1 / sw.STROKE_COST));
+  tankStep(lung, 1, sw);
+  ok('no refill while off the bottom', lung.tank < sw.STROKE_COST);
+  lung.grounded = true;
+  for (let i = 0; i < 240; i++) tankStep(lung, 1 / 60, sw);
+  ok('feet down refills the lungful', lung.tank === 1);
 
   // …and a stroke is not damped by letting go, or holding the button would be
   // the only way to swim up.
@@ -246,11 +282,30 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('physics.js'))
   ok('swim stroke ignores jump-cut', st.vel.y === sw.JUMP_V);
 
   // Jetpack: hold climbs to a cap and stays there; release means you fall.
-  const jp = { vel: { y: 0 }, stomping: false };
+  const jp = { vel: { y: 0 }, stomping: false, tank: 1, grounded: false };
   for (let i = 0; i < 120; i++) { thrustStep(jp, 1 / 60, true, jet); jp.vel.y -= jet.GRAV / 60; }
   ok(`thrust climbs to its cap (${jp.vel.y.toFixed(1)} <= ${jet.CLIMB})`,
     jp.vel.y > 0 && jp.vel.y <= jet.CLIMB + 1e-9);
   ok('thrust off = no lift', thrustStep(jp, 1 / 60, false, jet) === false);
+
+  // The tank runs dry after its documented burn, and a burnt-out jetpack is
+  // dead until you put it on a perch. This is what stops the level being one
+  // long hold of the space bar over the top of every platform in it.
+  jp.tank = 1;
+  let burned = 0;
+  while (thrustStep(jp, 1 / 60, true, jet)) burned += 1 / 60;
+  ok(`tank burns for ${burned.toFixed(1)}s (want ${(1 / jet.BURN).toFixed(1)})`,
+    Math.abs(burned - 1 / jet.BURN) < 0.05);
+  tankStep(jp, 1, jet);
+  ok('no refuelling in mid-air', thrustStep(jp, 1 / 60, true, jet) === false);
+  jp.grounded = true;
+  for (let i = 0; i < 300; i++) tankStep(jp, 1 / 60, jet);
+  ok('a perch refuels it', jp.tank === 1 && thrustStep(jp, 1 / 60, true, jet) === true);
+
+  // Running mode must be untouched by any of this.
+  const land = mk(); land.grounded = false; land.tank = 0;
+  tankStep(land, 1 / 60, T);
+  ok('running mode has no tank to run out of', land.tank === 1);
 
   console.log('PASS physics');
 }
