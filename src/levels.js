@@ -162,7 +162,7 @@ export const LEVELS = [
     B.floor(-4, 6.0, -294, 7, 7, 'rock');                  // z -297.5 .. -290.5
     B.floor(4, 8.4, -302, 7, 7, 'rock');                   // z -305.5 .. -298.5
     B.star(-4, 7.3, -294);
-    B.enemy('flapjack', 0, 5.5, -292, { axis: 'x', range: 8, bob: 1.8 });
+    B.enemy('flapjack', 0, 8.6, -292, { axis: 'x', range: 6, bob: 1.4 });
 
     /* --- H: the branch, and the flock that patrols it --------------------- */
     // NOT more gapped planks. F is already the gapped-plank set piece and doing
@@ -292,14 +292,14 @@ export const LEVELS = [
     B.star(3, 2.9, -568.5);
     B.star(0, 1.3, -576.5);
     B.enemy('flapjack', -3, 6.4, -554, { axis: 'x', range: 6, bob: 1.4 });
-    B.enemy('flapjack', 7, 5.0, -562, { axis: 'x', range: 6, bob: 1.6 });   // guards the detour
+    B.enemy('flapjack', 7, 7.0, -562, { axis: 'x', range: 6, bob: 1.4 });   // guards the detour
 
     B.floor(0, 0.0, -589, 18, 18, 'rock');                 // the arena: z -598 .. -580
     B.checkpoint(0, 0.0, -582);
     B.wall(-8.2, 3.0, -584, 1.4, 8, 3, 'rock');            // broken pillars
     B.wall(8.2, 3.0, -594, 1.4, 8, 3, 'rock');
-    B.enemy('grumblin', -5, 0.0, -585, { axis: 'x', range: 9 });
-    B.enemy('grumblin', 5, 0.0, -593, { axis: 'x', range: 9 });
+    B.enemy('grumblin', -4, 0.0, -585, { axis: 'x', range: 5 });   // range clears the pillar
+    B.enemy('grumblin', 4, 0.0, -593, { axis: 'x', range: 5 });
     B.enemy('prickle', 0, 0.0, -589, {});
     B.enemy('flapjack', 0, 2.2, -589, { axis: 'x', range: 10, bob: 1.6 });
     B.crateRow(-3.15, 0.0, -596, 4, 'plain', [2.1, 0, 0]);
@@ -459,7 +459,7 @@ export const LEVELS = [
     B.star(6, 13.0, -274); B.star(0, 11.4, -279); B.star(6, 9.8, -284);
     B.enemy('grumblin', 3, 14.8, -264, { axis: 'x', range: 6 });
     B.enemy('grumblin', 3, 10.0, -279, { axis: 'x', range: 6 });
-    B.enemy('flapjack', 3, 13.8, -271.5, { axis: 'x', range: 8, bob: 1.4 });
+    B.enemy('flapjack', 3, 15.4, -271.5, { axis: 'x', range: 8, bob: 1.4 });
     B.floor(11.5, 9.2, -278, 3.5, 5, 'rock');               // z -280.5 .. -275.5
     B.crate(11.5, 9.2, -278, 'star');
 
@@ -602,7 +602,7 @@ export const LEVELS = [
     B.floor(7, 30.0, -580.5, 6, 7, 'rock');                 // z -584 .. -577, abuts the tower
     B.wall(0, 32.4, -579, 8, 8, 42, 'rock');                // the tower, out of the sea
     B.crate(-8, 25.2, -581, 'life');                        // back corner, off the jump line
-    B.enemy('flapjack', -8, 25.0, -575, { range: 8, bob: 1.6 });
+    B.enemy('flapjack', -8, 25.0, -575, { axis: 'x', range: 6, bob: 1.6 });
     B.starLine(-8, 24.2, -569, 2, [0, 0, -1.8]);
     B.starLine(-8, 26.6, -578, 2, [0, 0, -1.8]);
     B.starLine(0, 29.0, -589, 2, [0, 0, -1.8]);
@@ -745,7 +745,7 @@ export const LEVELS = [
     B.floor(6, 23.4, -263, 20, 20, 'ice');                  // z -253 .. -273
     B.wall(-5.6, 26.4, -263, 2.2, 20, 3, 'rock');
     B.wall(17.6, 26.4, -263, 2.2, 20, 3, 'rock');
-    B.enemy('grumblin', 0, 23.4, -257, { axis: 'x', range: 9 });
+    B.enemy('grumblin', 1, 23.4, -257, { axis: 'x', range: 8 });
     B.enemy('grumblin', 10, 23.4, -266, { axis: 'x', range: 9 });
     B.enemy('prickle', 5, 23.4, -261, {});
     B.starLine(6, 24.8, -255, 4, [0, 0, -2.2]);             // z -255 .. -261.6
@@ -949,6 +949,9 @@ export const LEVELS = [
     B.star(5, 15.6, -61);
     B.enemy('jelly', 0, 8, -44, { bob: 3.2 });
     B.enemy('jelly', 0, 11, -51, { bob: 3.6 });
+    // A staircase with 12u of open water above it is not a staircase — you rise
+    // past the lot. An overhang keeps the climb in the pillars where it belongs.
+    B.box(0, 22, -51, 26, 30, 4, 'rock');                    // overhang: y 18 .. 22
 
     /* --- D: a shelf with a hole in it. Go DOWN ---------------------------- */
     B.floor(-8, 12, -76, 10, 16, 'rock');                    // x -13 .. -3
@@ -999,6 +1002,11 @@ export const LEVELS = [
     B.box(4, 12.5, -180, 15, 4, 3, 'rock');
     B.star(4, 5, -180);
     B.starLine(-6, 8.0, -160, 4, [2.0, -0.6, -1.8]);         // weaves down into arch two
+    // The arches only mean anything if you have to go THROUGH one. The shelf
+    // hangs at 13.5, so the two low crowns (11) still leave a swimmable slot
+    // over the top and the tall one (12.5) does not — some you thread, some you
+    // skim, which is a choice rather than a corridor.
+    B.box(0, 17.5, -169, 26, 36, 4, 'rock');                 // shelf: y 13.5 .. 17.5
     B.enemy('grumblin', -6, 0, -174, { axis: 'x', range: 8 });
     B.enemy('grumblin', 6, 0, -184, { axis: 'x', range: 7 });
     B.checkpoint(0, 0, -185);                                // 134u from the last one otherwise
@@ -1059,6 +1067,7 @@ export const LEVELS = [
     B.crateRow(-3.9, 2.4, -306, 4, 'plain', [2.6, 0, 0]);
     B.starLine(-8, 3.8, -300, 2, [0, 0, -2.2]);
     B.starLine(8, 3.8, -314, 2, [0, 0, -2.2]);
+    B.box(0, 16, -309, 22, 26, 4, 'rock');                   // lid: fight the arena, don't float over it
 
     /* --- L: the fork. Low tunnel pays, high road is safe ------------------ */
     B.floor(0, 2.4, -334, 12, 22, 'sand');                   // z -345 .. -323
@@ -1080,8 +1089,9 @@ export const LEVELS = [
     B.enemy('flapjack', 0, 10.0, -364, { axis: 'x', range: 6, bob: 1.6 });
     B.enemy('flapjack', 0, 12.0, -372, { axis: 'x', range: 6, bob: 1.8 });
     B.enemy('flapjack', 0, 12.5, -380, { axis: 'x', range: 6, bob: 1.8 });
-    B.enemy('flapjack', 0, 11.0, -388, { axis: 'x', range: 6, bob: 1.6 });
+    B.enemy('flapjack', 0, 12.0, -388, { axis: 'x', range: 6, bob: 1.6 });
     B.starLine(0, 13, -366, 3, [0, 0, -10.0], 2.4);
+    B.box(0, 20, -378, 26, 40, 4, 'rock');                   // roof: the flock is the gate, so you can't rise over it
 
     /* --- N: the springboard launch --------------------------------------- */
     // A spring bounce is fixed at 23.2 up, which under swim gravity is a 24u
@@ -1272,6 +1282,10 @@ export const LEVELS = [
     B.star(-3, 11, -100);
     B.enemy('flapjack', 0, 16, -70, { axis: 'x', range: 9, bob: 2 });
     B.enemy('flapjack', 0, 16, -96, { axis: 'x', range: 9, bob: 2 });
+    // A forest you can climb over is not a forest. The tall columns top out at
+    // 30 and the sky is 40, so without this you hold SPACE, sit at the ceiling
+    // and the whole weave is decoration. Same trick as the L baffles.
+    B.wall(0, SKY, -84, 56, 52, 10, 'rock');                 // roof: y 30 .. 40
 
     /* --- D: perch one. Land, smash, save --------------------------------- */
     B.floor(0, 10, -112, 16, 12, 'metal');                   // z -118 .. -106
@@ -1300,8 +1314,9 @@ export const LEVELS = [
     // Off in the corner, not dead centre of the pad under its own star — the
     // landing has to have a safe half or it is a coin flip you can't see.
     B.enemy('prickle', 11, 18, -194, {});
-    B.enemy('flapjack', 0, 12, -178, { axis: 'x', range: 8, bob: 1.6 });
+    B.enemy('flapjack', 0, 14.4, -178, { axis: 'x', range: 8, bob: 1.6 });
     B.enemy('zapdrone', 0, 20, -195, { axis: 'x', range: 12 });
+    B.wall(0, SKY, -185, 56, 44, 10, 'rock');                // roof: climb the pads, not past them
 
     /* --- G: perch two, high up ------------------------------------------- */
     B.floor(0, 29, -214, 16, 12, 'metal');                   // z -220 .. -208
@@ -1361,6 +1376,7 @@ export const LEVELS = [
     B.star(0, 19, -358); B.star(0, 22, -370);
     B.star(6, 24, -376); B.star(0, 26, -382); B.star(0, 29, -394);
     B.enemy('zapdrone', 0, 20, -376, { axis: 'x', range: 14 });
+    B.wall(0, SKY, -377, 56, 52, 10, 'rock');                // roof: ride the movers, don't overfly them
 
     /* --- L: the chicane. Baffles off alternate walls, floor to sky -------- */
     // Was two side walls you could simply fly over the top of, which made the
@@ -1380,9 +1396,9 @@ export const LEVELS = [
     B.star(-14, 22, -442); B.star(-12, 22, -448);
     B.crate(9, 8, -412, 'plain');
     B.crate(-15, 20, -448, 'star');                          // the far corner of the last baffle
-    B.enemy('grumblin', 12, 8, -412, { axis: 'x', range: 6 });
+    B.enemy('grumblin', 13.5, 8, -412, { axis: 'x', range: 5 });
     B.enemy('prickle', -15, 12, -424, {});
-    B.enemy('flapjack', 0, 20, -430, { axis: 'x', range: 12, bob: 2 });
+    B.enemy('flapjack', 14, 20, -430, { axis: 'x', range: 10, bob: 2 });
     B.enemy('grumblin', 12, 16, -436, { axis: 'x', range: 6 });
 
     /* --- M: perch four, the last safe ground ------------------------------ */
@@ -1409,10 +1425,13 @@ export const LEVELS = [
     B.crate(-4, 4, -500, 'star');
     B.crate(4, 4, -514, 'life');
     B.crateRow(-2, 4, -526, 2, 'plain', [2.1, 0, 0]);
-    B.enemy('zapdrone', -8, 10, -486, { axis: 'z', range: 18 });   // head-on
+    B.enemy('zapdrone', -8, 10, -482, { axis: 'z', range: 8 });    // head-on, clear of the pillar
     B.enemy('zapdrone', 8, 20, -498, { axis: 'z', range: 18 });    // head-on, higher
-    B.enemy('zapdrone', 0, 30, -510, { axis: 'x', range: 20 });
+    B.enemy('zapdrone', 0, 28, -510, { axis: 'x', range: 20 });
     B.enemy('zapdrone', -10, 15, -522, { axis: 'x', range: 18 });
+    // The hall was sealed on the sides and open to the sky, so the traffic was
+    // avoidable by flying over all of it. Now it is a hall.
+    B.wall(0, SKY, -505, 56, 60, 10, 'rock');                // roof: y 30 .. 40
     B.enemy('flapjack', 6, 8, -530, { axis: 'x', range: 12, bob: 2.4 });
 
     /* --- N2: the launch ledge. Save BEFORE the climb, not after ----------- */

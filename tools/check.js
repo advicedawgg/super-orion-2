@@ -7,8 +7,8 @@
 // can't be reached. Eyeballing level geometry does not work. This does.
 
 import { LEVELS } from '../src/levels.js';
-import { buildLevel, killPlane, FLOATING } from '../src/builder.js';
-import { T, tuning, isFreeMode } from '../src/physics.js';
+import { buildLevel, killPlane, FLOATING, BODY } from '../src/builder.js';
+import { T, tuning, isFreeMode, hasTank } from '../src/physics.js';
 
 const SAFETY = 0.85;          // players are not frame-perfect; demand slack
 
@@ -28,6 +28,40 @@ function arcs(t) {
     return t.SPEED * (up + fall);
   };
   return { H1, H2, reach };
+}
+
+/* -------------------------------------------------------------- tank model */
+// In a free mode the question is not "can you jump it" but "can you get there
+// before the tank runs dry", because the tank only refills on solid ground.
+// Same constants the game uses, so a level cannot pass here and strand a player.
+//
+// ponytail: a coarse envelope — spend fuel climbing, spend the rest gaining
+// height, then glide down — not a trajectory solver. It answers "is there
+// anywhere to land between here and there", which is the failure it exists to
+// catch. Tighten it only if something slips through in a real playtest.
+const fallTime = (h, t) => {
+  const tc = t.MAXFALL / t.GRAV, hc = t.MAXFALL * tc / 2;      // to terminal speed
+  return h <= hc ? Math.sqrt(2 * Math.max(0, h) / t.GRAV) : tc + (h - hc) / t.MAXFALL;
+};
+/** Furthest horizontal travel on ONE tankful that ends `dy` above the start. */
+function tankReach(t) {
+  return dy => {
+    let air;
+    if (t.BURN) {
+      const budget = 1 / t.BURN;                                // seconds of burn
+      const climb = Math.max(0, dy) / t.CLIMB;
+      if (climb > budget) return -1;
+      const spare = budget - climb;
+      air = climb + spare + fallTime(t.CLIMB * spare, t);
+    } else {
+      const n = Math.floor(1 / t.STROKE_COST);                  // strokes in a lungful
+      const per = t.JUMP_V ** 2 / (2 * t.GRAV);                 // height one stroke buys
+      const need = Math.ceil(Math.max(0, dy) / per);
+      if (need > n) return -1;
+      air = n * (t.JUMP_V / t.GRAV) + fallTime(per * (n - need), t);
+    }
+    return t.SPEED * air;
+  };
 }
 
 const rect = s => ({ x0: s.x - s.w / 2, x1: s.x + s.w / 2, z0: s.z - s.d / 2, z1: s.z + s.d / 2 });
@@ -106,6 +140,43 @@ for (const def of LEVELS) {
     }
   }
 
+  /* ---- can you actually CROSS a free-mode level on one tankful at a time? ----
+     The flood fill above deliberately gives up on free modes, and used to be
+     the end of it: height was free, so everything was reachable by definition.
+     It is not any more — the tank only refills with your feet on something —
+     so this is the pass that proves the level still joins up. */
+  if (hasTank(t)) {
+    const range = tankReach(t);
+    const tankEdge = (a, b) => {
+      let best = Infinity;
+      for (const fa of footprints(a)) for (const fb of footprints(b)) {
+        const r = range(fb.top - fa.top);
+        if (r > 0) best = Math.min(best, gap(fa.r, fb.r) / r);
+      }
+      return best;
+    };
+    // You start floating; the seed is whatever you can first put your feet on.
+    const seed = plats.filter(p => gapPt(start, p.r) < 6 && p.top <= start.y + 2);
+    const got = new Set(seed), q = [...seed];
+    while (q.length) {
+      const a = q.pop();
+      for (const b of plats) {
+        if (got.has(b) || tankEdge(a, b) > SAFETY) continue;
+        got.add(b); q.push(b);
+      }
+    }
+    const onTank = (p, hr, vUp, vDown) => [...got].some(pl =>
+      footprints(pl).some(f => gapPt(p, f.r) <= hr && p.y <= f.top + vUp && p.y >= f.top - vDown));
+    if (!seed.length) fail('nothing to land on near the start — the tank can never fill');
+    if (d.goal && !onTank(d.goal, 3.4, 6, 6)) fail(`goal at z=${d.goal.z.toFixed(0)} is beyond refuelling range`);
+    for (const c of d.checkpoints)
+      if (!onTank(c, 3.0, 4, 4)) fail(`checkpoint at z=${c.z.toFixed(0)} is beyond refuelling range`);
+    const dry = plats.filter(p => !got.has(p) && !p.s.crate && !p.s.moving && !p.s.scenery);
+    if (dry.length)
+      warn(`${dry.length} platform(s) unreachable on one tankful, e.g. ${dry.slice(0, 3).map(p => `(${p.s.x.toFixed(0)},${p.top.toFixed(1)},${p.s.z.toFixed(0)})`).join(' ')}`);
+    console.log(`  tank: ${range(0).toFixed(0)}u flat / ${(t.BURN ? t.CLIMB / t.BURN : Math.floor(1 / t.STROKE_COST) * t.JUMP_V ** 2 / (2 * t.GRAV)).toFixed(0)}u up on one fill`);
+  }
+
   const unreached = plats.filter(p => !reached.has(p) && !p.s.crate);
   if (unreached.length)
     warn(`${unreached.length} platform(s) never reachable, e.g. ${unreached.slice(0, 3).map(p => `(${p.s.x.toFixed(0)},${p.top.toFixed(1)},${p.s.z.toFixed(0)})`).join(' ')}`);
@@ -158,6 +229,44 @@ for (const def of LEVELS) {
         && Math.abs(s.y - e.y) < 0.6;
     });
     if (!under) fail(`${e.kind} at (${e.x},${e.y},${e.z}) has no floor under it`);
+  }
+
+  // A patrol that spends half its circuit inside a rock. The placed position is
+  // fine and the diff looks fine — it is the SWEPT volume that clips, so the
+  // only way to see it is to sweep it. Enemies pass through each other and the
+  // player on purpose; passing through the level is not on purpose.
+  for (const e of d.enemies) {
+    const b = BODY[e.kind];
+    if (!b) continue;
+    const range = e.opt.range ?? b.range, bob = e.opt.bob ?? b.bob;
+    const ax = e.opt.axis === 'x';
+    // grumblin/flapjack/zapdrone sweep +-range/2 along `axis` (z by default);
+    // prickle and jelly hold station. Bob is vertical, either side of `y`.
+    const half = (BODY[e.kind].range === 0 && e.kind !== 'grumblin' ? 0 : range) / 2;
+    const box = {
+      x0: e.x - b.radius - (ax ? half : 0), x1: e.x + b.radius + (ax ? half : 0),
+      z0: e.z - b.radius - (ax ? 0 : half), z1: e.z + b.radius + (ax ? 0 : half),
+      y0: e.y - bob, y1: e.y + bob + b.height,
+    };
+    // A ground enemy's feet are ON its floor, so ignore whatever it stands on.
+    const standing = !FLOATING.has(e.kind);
+    // Depth, not contact: half the level is built out of abutting slabs and a
+    // patrol that grazes one by 0.2u is invisible. 0.4u is where it starts to
+    // read on screen as "that thing just went into the rock".
+    const DEEP = 0.4;
+    let worst = null;
+    for (const s of d.solids) {
+      if (s.scenery) continue;
+      if (standing && Math.abs(s.y - e.y) < 0.6) continue;
+      const r = rect(s);
+      const pen = Math.min(
+        Math.min(box.x1, r.x1) - Math.max(box.x0, r.x0),
+        Math.min(box.z1, r.z1) - Math.max(box.z0, r.z0),
+        Math.min(box.y1, s.y) - Math.max(box.y0, s.y - s.h));
+      if (pen >= DEEP && (!worst || pen > worst.pen)) worst = { s, pen };
+    }
+    if (worst)
+      fail(`${e.kind} at (${e.x},${e.y},${e.z}) sweeps ${worst.pen.toFixed(1)}u into the ${worst.s.tex} at (${worst.s.x},${worst.s.y},${worst.s.z})`);
   }
 
   // Nothing playable should sit at or below the kill plane.
