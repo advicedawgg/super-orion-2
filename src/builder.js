@@ -14,6 +14,24 @@ export const CRATE_SIZE = 1.8;
  */
 export const FLOATING = new Set(['flapjack', 'jelly', 'zapdrone']);
 
+/**
+ * How big each enemy is and how far it moves when the level doesn't say.
+ * Here, in the pure module, because tools/check.js needs the same numbers to
+ * sweep a patrol path through the level and catch a bat that spends half its
+ * circuit inside a rock — which is invisible in the diff and obvious on screen.
+ * src/world.js spreads these into ENEMY and owns the art and the tick.
+ *
+ * `range` is the FULL sweep (the tick moves +-range/2) along `axis`, and `bob`
+ * is the vertical amplitude either side of the placed y.
+ */
+export const BODY = {
+  grumblin: { radius: .75, height: 1.2, range: 6, bob: 0 },
+  prickle: { radius: .8, height: 1.0, range: 0, bob: 0 },
+  jelly: { radius: .85, height: 1.7, range: 0, bob: 2.2 },
+  zapdrone: { radius: .8, height: 1.2, range: 8, bob: .6 },
+  flapjack: { radius: .7, height: 1.0, range: 5, bob: 1.4 },
+};
+
 /** Crate collider, derived in ONE place so the game and the checker agree. */
 export const crateSolid = c => ({
   x: c.x, y: c.y + CRATE_SIZE, z: c.z,

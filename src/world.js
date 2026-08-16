@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { tex, skyTexture, crateFace } from './art.js';
 import { bounds, T } from './physics.js';
-import { buildLevel, killPlane, CRATE_SIZE } from './builder.js';
+import { buildLevel, killPlane, CRATE_SIZE, BODY } from './builder.js';
 
 /* ------------------------------------------------------ geometry helpers */
 const geoCache = new Map();
@@ -442,7 +442,7 @@ const lam = c => new THREE.MeshLambertMaterial({ color: c });
 export const ENEMY = {
   // Waddles back and forth. The bread-and-butter stomp customer.
   grumblin: {
-    radius: .75, height: 1.2, speed: 2.6, range: 6,
+    ...BODY.grumblin, speed: 2.6,
     build() {
       const g = new THREE.Group();
       const b = new THREE.Mesh(new THREE.BoxGeometry(1.1, .9, 1.0), lam(0x4caf50));
@@ -468,7 +468,7 @@ export const ENEMY = {
   },
   // SPIKY. Can't be stomped or spun — this one you jump over. (Hi, prickleburr.)
   prickle: {
-    radius: .8, height: 1.0, stompProof: true, spinProof: true, speed: 1.4, range: 0,
+    ...BODY.prickle, stompProof: true, spinProof: true, speed: 1.4,
     build() {
       const g = new THREE.Group();
       const b = new THREE.Mesh(new THREE.IcosahedronGeometry(.6, 0), lam(0x6d4c41));
@@ -491,7 +491,7 @@ export const ENEMY = {
   // Floats, so it must also be in FLOATING (src/builder.js) or the checker
   // fails it for standing in mid-water.
   jelly: {
-    radius: .85, height: 1.7, stompProof: true, spinProof: true, speed: 1.1, range: 0, bob: 2.2,
+    ...BODY.jelly, stompProof: true, spinProof: true, speed: 1.1,
     build() {
       const g = new THREE.Group();
       const bell = new THREE.Mesh(
@@ -519,7 +519,7 @@ export const ENEMY = {
   },
   // Flight levels. Crackles, patrols, and cannot be attacked — fly around it.
   zapdrone: {
-    radius: .8, height: 1.2, stompProof: true, spinProof: true, speed: 3.2, range: 8, bob: .6,
+    ...BODY.zapdrone, stompProof: true, spinProof: true, speed: 3.2,
     build() {
       const g = new THREE.Group();
       const body = new THREE.Mesh(new THREE.OctahedronGeometry(.55, 0), lam(0x8892a6));
@@ -542,28 +542,91 @@ export const ENEMY = {
     },
   },
   // Hovers and bobs. Stompable, but it's moving in three dimensions.
+  //
+  // Was a purple ball with two flat rectangles stuck to its sides, spun about
+  // their own centres — which is not flapping, it is a propeller, and it read
+  // as exactly that. A wing has to be HINGED at the shoulder and it has to have
+  // a wing's outline, so the shape is a scalloped membrane on a pivot group and
+  // the flap sweeps forward as it comes down, the way a real one does.
   flapjack: {
-    radius: .7, height: 1.0, speed: 2.2, range: 5, bob: 1.4,
+    ...BODY.flapjack, speed: 2.2,
     build() {
       const g = new THREE.Group();
-      const b = new THREE.Mesh(new THREE.SphereGeometry(.5, 8, 6), lam(0x9b59d0));
-      b.position.y = .5; g.add(b);
+      const skin = lam(0x9b59d0), dark = lam(0x6d3a99);
+      const body = new THREE.Mesh(new THREE.SphereGeometry(.42, 10, 8), skin);
+      body.position.y = .5; body.scale.set(1, 1.1, .92); g.add(body);
+      const snout = new THREE.Mesh(new THREE.ConeGeometry(.17, .3, 7), skin);
+      snout.position.set(0, .46, .38); snout.rotation.x = Math.PI / 2; g.add(snout);
       for (const s of [-1, 1]) {
-        const w = new THREE.Mesh(new THREE.PlaneGeometry(.9, .55),
+        const ear = new THREE.Mesh(new THREE.ConeGeometry(.13, .34, 5), dark);
+        ear.position.set(s * .19, .86, -.02); ear.rotation.z = s * .34; g.add(ear);
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(.085, 7, 5), lam(0xfff3b0));
+        eye.position.set(s * .16, .59, .34); g.add(eye);
+        const pup = new THREE.Mesh(new THREE.SphereGeometry(.04, 6, 4), lam(0x1a1a1a));
+        pup.position.set(s * .16, .59, .40); g.add(pup);
+        const fang = new THREE.Mesh(new THREE.ConeGeometry(.035, .1, 4), lam(0xffffff));
+        fang.position.set(s * .07, .34, .38); fang.rotation.x = Math.PI; g.add(fang);
+
+        // The pivot IS the shoulder: rotate the group, not the membrane, or the
+        // wing spins in place instead of beating.
+        const pivot = new THREE.Group();
+        pivot.position.set(s * .3, .62, 0);
+        pivot.name = 'wing' + (s < 0 ? 'L' : 'R');
+        const memb = new THREE.Mesh(wingGeometry(),
           new THREE.MeshLambertMaterial({ color: 0xe4c1ff, side: THREE.DoubleSide }));
-        w.position.set(s * .62, .62, 0); w.rotation.y = Math.PI / 2;
-        w.name = 'wing' + (s < 0 ? 'L' : 'R'); g.add(w);
-        const eye = new THREE.Mesh(new THREE.BoxGeometry(.13, .16, .08), lam(0xffffff));
-        eye.position.set(s * .18, .6, .44); g.add(eye);
+        // Canted, not upright and not flat. Upright is what made the old wings
+        // billboards — tilting a plane that already faces you is a spin, not a
+        // beat. Dead flat solves that but then the camera sees them edge-on and
+        // they vanish to slivers. ~60° keeps real area on screen AND a real
+        // hinge, which is the whole difference.
+        memb.rotation.x = -1.05;
+        memb.scale.x = s;                              // one shape, mirrored
+        pivot.add(memb);
+        g.add(pivot);
       }
       return g;
     },
-    tick(e) {
+    tick(e, dt) {
       const k = Math.sin(e.t * e.speed / Math.max(1, e.range) * 2), ax = e.axis === 'x';
       e.pos[ax ? 'x' : 'z'] = e.home[ax ? 'x' : 'z'] + k * e.range / 2;
       e.pos.y = e.home.y + Math.sin(e.t * 2.4) * e.bob;
-      for (const w of e.mesh.children)
-        if (w.name?.startsWith('wing')) w.rotation.z = Math.sin(e.t * 14) * .5 * (w.name.endsWith('L') ? 1 : -1);
+      // Deliberately NOT turned to face travel, unlike the ground patrollers:
+      // these mostly run along x, and side-on the wings point at the camera and
+      // foreshorten to nothing. Facing the camera is what keeps the beat legible
+      // — the same reason the crate-top star doesn't spin. It banks instead.
+      e.mesh.rotation.z = -k * .18;
+      // Downstroke fast, recovery slow — an even sine reads as a machine.
+      const beat = Math.sin(e.t * 9);
+      const flap = Math.sign(beat) * Math.pow(Math.abs(beat), .6);
+      for (const w of e.mesh.children) {
+        if (!w.name?.startsWith('wing')) continue;
+        const s = w.name.endsWith('L') ? 1 : -1;
+        w.rotation.z = s * (flap * .62 + .16);
+        w.rotation.y = s * flap * .22;                 // sweeps forward as it drops
+      }
+      e.mesh.children[0].position.y = .5 - flap * .06;  // body lifts on the beat
     },
   },
 };
+
+/* ---- the bat wing ----
+ * Built once and shared. Three scallops along the trailing edge and a thumb
+ * claw at the leading tip: the outline is the whole reason it reads as a wing
+ * rather than a paddle, and it costs one Shape.
+ */
+function wingGeometry() {
+  if (geoCache.has('#wing')) return geoCache.get('#wing');
+  const s = new THREE.Shape();
+  s.moveTo(0, .06);
+  s.lineTo(.34, .24);            // leading edge, out to the wrist
+  s.lineTo(.92, .30);            // …and on to the thumb
+  s.lineTo(.86, .14);
+  s.quadraticCurveTo(.74, .02, .62, -.10);   // scallop 1
+  s.quadraticCurveTo(.56, .04, .44, -.14);   // scallop 2
+  s.quadraticCurveTo(.36, .00, .24, -.18);   // scallop 3
+  s.quadraticCurveTo(.14, -.06, 0, -.10);
+  s.closePath();
+  const g = new THREE.ShapeGeometry(s, 6);
+  geoCache.set('#wing', g);
+  return g;
+}
