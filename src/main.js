@@ -364,15 +364,27 @@ function segmentHits(from, to, s) {
   return true;
 }
 
-/** Hide whatever is standing between the camera and Orion; restore the rest. */
+/** Ghost a solid's meshes: every material slot stops writing colour or depth,
+ *  so the slab paints nothing and cannot occlude, while staying visible to the
+ *  shadow pass (which only checks visible + castShadow) — its shadow survives. */
+function ghostSolid(s, on) {
+  s.mesh.traverse(o => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) { m.colorWrite = !on; m.depthWrite = !on; }
+  });
+}
+
+/** Ghost whatever is standing between the camera and Orion; restore the rest.
+ *  Ghosted, not hidden: the slab keeps casting its shadow, so nothing pops. */
 function keepOrionInSight() {
-  for (const s of occluded) if (s.mesh) s.mesh.visible = true;
+  for (const s of occluded) if (s.mesh) ghostSolid(s, false);
   occluded.length = 0;
   for (const s of world.solids) {
     // Crates and tree trunks own their own meshes and are too small to blind
     // you; only the architecture is worth cutting away.
     if (!s.mesh) continue;
-    if (segmentHits(camAim, cam.position, s)) { s.mesh.visible = false; occluded.push(s); }
+    if (segmentHits(camAim, cam.position, s)) { ghostSolid(s, true); occluded.push(s); }
   }
 }
 

@@ -106,7 +106,6 @@ export class World {
   // edge a little — which is also what the key art shows.
   addSolidMesh(s) {
     const set = SURFACE[s.tex] || { top: s.tex, side: s.tex };
-    const side = surface(set.side), top = surface(set.top);
 
     // s.mesh is a Group anchored at the solid's TOP-CENTRE, matching how
     // solids are defined, so movers can just copy their position onto it.
@@ -115,7 +114,10 @@ export class World {
 
     if (set.cap && s.h >= 1.5) {
       const bodyH = s.h - CAP;
-      const body = new THREE.Mesh(tiledBox(s.w, bodyH, s.d, 4), side);
+      // Clones of the shared surface materials, not the shared instances:
+      // keepOrionInSight ghosts occluders by rewriting the slab's materials,
+      // and a flag on the cached instance would ghost the whole level.
+      const body = new THREE.Mesh(tiledBox(s.w, bodyH, s.d, 4), surface(set.side).clone());
       body.position.y = -CAP - bodyH / 2;
 
       // Only overhang on sides with nothing next to them. Two platforms that
@@ -124,12 +126,14 @@ export class World {
       // z-fight along the join.
       const o = this.freeSides(s);
       const cw = s.w + o.xm + o.xp, cd = s.d + o.zm + o.zp;
-      const cap = new THREE.Mesh(tiledBox(cw, CAP, cd, 4), top);
+      const cap = new THREE.Mesh(tiledBox(cw, CAP, cd, 4), surface(set.top).clone());
       cap.position.set((o.xp - o.xm) / 2, -CAP / 2, (o.zp - o.zm) / 2);
       g.add(body, cap);
     } else {
       // BoxGeometry groups are +X,-X,+Y,-Y,+Z,-Z — top face only gets `top`.
-      const m = new THREE.Mesh(tiledBox(s.w, s.h, s.d, 4), [side, side, top, side, side, side]);
+      // Two clones for the six slots — same per-mesh reason as the branch above.
+      const sc = surface(set.side).clone(), tc = surface(set.top).clone();
+      const m = new THREE.Mesh(tiledBox(s.w, s.h, s.d, 4), [sc, sc, tc, sc, sc, sc]);
       m.position.y = -s.h / 2;
       g.add(m);
     }

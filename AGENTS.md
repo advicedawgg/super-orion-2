@@ -92,15 +92,20 @@ Placement is not the same question as path.
 
 The rig is fixed per level, so occlusion is guaranteed rather than possible — the back of the
 lighthouse, a tunnel roof, and every full-corridor gate in the flight level. `keepOrionInSight()`
-in `main.js` hides any solid strictly between the camera and Orion.
+in `main.js` ghosts any solid strictly between the camera and Orion.
 
 Do NOT "fix" this by shortening the boom. That was tried: the corridor walls are 56u wide and 4u
 thick, so pulling in until the line is clear puts the camera inside the wall, or a foot from Orion's
-back. Hiding the occluder keeps the full boom and never hides what he is flying toward, because
+back. Ghosting the occluder keeps the full boom and never hides what he is flying toward, because
 what is ahead of him is not on the segment.
 
-Consequence worth knowing: a hidden mesh casts no shadow, so a big slab's shadow pops as it is cut
-away. That is cheaper than being blind.
+Consequence worth knowing: the occluder is ghosted, not hidden. It stays
+`visible`, and its per-mesh material clone is written with `colorWrite`/`depthWrite = false` —
+invisible to the camera, and writing no depth either, so it cannot occlude anything behind it.
+The shadow-map pass, though, gates on object/material `visible` + `castShadow`, NOT on
+`colorWrite`/`depthWrite`, so the slab keeps casting its shadow and there is no pop. The cost:
+the slab's fragments still run and write nothing, and each solid carries one cloned Lambert
+material instead of the shared cache instance.
 
 ## The hub
 
