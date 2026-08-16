@@ -72,6 +72,17 @@ class Builder {
     return this.floor(x, y, (z0 + z1) / 2, w, Math.abs(z1 - z0), tex);
   }
   wall(x, y, z, w, d, h, tex = 'rock') { return this.box(x, y, z, w, d, h, tex); }
+  /**
+   * A ceiling. Solid like any other box, but it does NOT cast a shadow — a slab
+   * hanging over the whole play space blacks out everything under it, and the
+   * level you enclosed to stop the player flying over it becomes a level nobody
+   * can see. The shadow is worth less than the room.
+   */
+  roof(x, y, z, w, d, h, tex = 'rock') {
+    const s = this.box(x, y, z, w, d, h, tex);
+    s.noShadow = true;
+    return s;
+  }
 
   /** Platform sliding between here and `to`. period = seconds per round trip. */
   mover(x, y, z, w, d, h, to, period = 4, tex = 'metal') {

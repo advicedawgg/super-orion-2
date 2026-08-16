@@ -42,6 +42,11 @@ const SURFACE = {
   rock: { top: 'rock', side: 'rock' },
   ice: { top: 'ice', side: 'rock', cap: true },
   metal: { top: 'metal', side: 'metal' },
+  // No `cap`: the turf overhang is a grass/dirt idea and a plate edge is a
+  // plate edge. Deck wears panel down its sides, so a pad reads as a walkway
+  // bolted onto structure rather than a floating slab of chequer plate.
+  deck: { top: 'deck', side: 'panel' },
+  panel: { top: 'panel', side: 'panel' },
 };
 const CAP = 0.45;   // thickness of the turf layer
 const LIP = 0.18;   // how far it overhangs the cliff face
@@ -127,7 +132,8 @@ export class World {
       m.position.y = -s.h / 2;
       g.add(m);
     }
-    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    // A ceiling still RECEIVES shadow; it just must not cast one. See B.roof().
+    g.traverse(o => { if (o.isMesh) { o.castShadow = !s.noShadow; o.receiveShadow = true; } });
     s.mesh = g; this.group.add(g);
     return g;
   }
@@ -349,6 +355,7 @@ function near(p, q, r, hgt) {
 const SPLASH = {
   water: 0x8fd8f0, grass: 0x6cc24a, dirt: 0x8a5a30,
   sand: 0xe8d49a, rock: 0x9aa2b4, lava: 0xff8a3d, ice: 0xdff4ff,
+  deck: 0xc2ccd9, panel: 0x59647a,
 };
 
 /* ---------------------------------------------------------------- crates */

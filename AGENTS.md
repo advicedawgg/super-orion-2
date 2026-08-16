@@ -117,6 +117,14 @@ Levels are `build(B)` functions in `src/levels.js` run against the Builder.
     satisfying and a seven-year-old giving up
 - `ground()` is the world floor far below — **not solid**, so pits still kill. It's what
   stops the level reading as platforms in a void. `killPlane` derives from it.
+- `roof()` is a `wall()` that casts no shadow. Use it for every ceiling. A slab hanging
+  over the play space is lit from above, so it drops the whole room into shadow — the
+  first pass at enclosing the flight level made it almost unplayably dark, and the level
+  you enclosed to stop the player flying over it became a level nobody could see.
+- Surfaces come from `SURFACE` in `world.js`. `deck` (tread plate) and `panel` (riveted
+  plating) are the flight level's set. Keep floors light and structure dark: which
+  surfaces you can LAND on has to be readable at a glance, which is the actual job the
+  ice pads were doing before they were an ice rink in a space station.
 - Trees are **solid by default** (you can't walk through a trunk you're standing beside).
   Backdrop trees must pass `solid = false`, or a falling player lands on one instead of dying.
 

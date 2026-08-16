@@ -37,6 +37,9 @@ function fbm(seed, oct = 4, base = 4) {
 /* ------------------------------------------------------- pixel-level paint */
 const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 const hex = h => [(h >> 16 & 255), (h >> 8 & 255), (h & 255)];
+// JS `%` keeps the sign, which tears a tiling pattern wherever the argument
+// goes negative. This is the one that wraps.
+const frac = v => v - Math.floor(v);
 
 // Paint an SxS canvas by calling shade(x01, y01, noiseFns) -> [r,g,b] 0-255.
 function paint(S, shade) {
@@ -128,6 +131,40 @@ const RECIPES = {
     const a = hex(0x0e5c8a), b = hex(0x3fb6d8);
     return paint(256, (x, y) => mix(a, b, n(x, y)));
   },
+  // --- the flight level's industrial set ---
+  // Ice pads and grey rock in a space station read as a glacier someone parked
+  // a gate on. These two replace them, and the light/dark split is not
+  // decoration: `deck` is what you LAND on and `panel` is what you must not hit,
+  // so the pads have to pop out of the walls the way the ice used to.
+  deck() {
+    const n = fbm(211, 4, 8), wear = fbm(233, 3, 5);
+    const a = hex(0x6b7686), b = hex(0xc2ccd9), mark = hex(0xd8a63a);
+    return paint(256, (x, y) => {
+      // Two mirrored diagonal families = the classic diamond tread plate. The
+      // frequency must be a whole number or the pattern tears at the seam.
+      const F = 10;
+      const d1 = Math.abs(frac((x + y) * F) - .5);
+      const d2 = Math.abs(frac((x - y) * F) - .5);
+      const tread = Math.max(0, .5 - Math.min(d1, d2) * 2.4);
+      let c = mix(a, b, n(x, y) * .4 + tread * 1.25);
+      const w = wear(x, y);
+      if (w > .72) c = mix(c, mark, (w - .72) * 2.4);      // scuffed safety paint
+      return c.map(k => Math.min(255, k));
+    });
+  },
+  panel() {
+    const n = fbm(251, 4, 6), grime = fbm(269, 2, 16);
+    const a = hex(0x2c3341), b = hex(0x59647a), rivet = hex(0x93a0b6);
+    return paint(256, (x, y) => {
+      const P = 4;                                    // 4x4 plates across the tile
+      const u = frac(x * P), v = frac(y * P);
+      let c = mix(a, b, n(x, y) * .75 + .12);
+      if (Math.min(u, 1 - u, v, 1 - v) < .035) c = c.map(k => k * .5);   // recessed seam
+      const r = Math.hypot(Math.min(u, 1 - u) - .08, Math.min(v, 1 - v) - .08);
+      if (r < .024) c = mix(c, rivet, .85);            // a rivet inside each corner
+      return c.map(k => k * (.86 + .26 * grime(x, y)));
+    });
+  },
   metal() {
     const n = fbm(199, 3, 32);
     const a = hex(0x555f70), b = hex(0xb9c4d6);
@@ -138,6 +175,8 @@ const RECIPES = {
   },
   // Orion's skin/cloth atlas is drawn, not noised — it needs to read as a face.
   orion() { return orionAtlas(); },
+  // Same 256px layout, armoured. Worn only in the flight level.
+  orionSuit() { return orionSuitAtlas(); },
 };
 
 /* ------------------------------------------------- the character texture */
@@ -174,6 +213,55 @@ function orionAtlas() {
   px(.5, .68, .5, .16, '#d13b4a');                 // shorts
   px(.5, .84, .5, .16, '#f0c39a');                 // leg skin
   px(.5, .93, .5, .07, '#f4f4f4');                 // sock/shoe
+  return cv;
+}
+
+/**
+ * The flight suit. Same 256px atlas layout as `orionAtlas` — it has to be, the
+ * UV rects in player.js are shared — so this is a straight repaint: red plate,
+ * gold trim, a gold faceplate with lit eye slits, and a reactor on the chest.
+ *
+ * Deliberately its OWN shapes rather than anyone else's: blocky N64 plates, a
+ * wedge faceplate and a three-ring reactor. It should read as "Orion built
+ * himself a flying suit", which is the story, not as merchandise.
+ */
+function orionSuitAtlas() {
+  const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d');
+  const px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x * S, y * S, w * S, h * S); };
+  const disc = (x, y, r, c) => {
+    g.fillStyle = c; g.beginPath(); g.arc(x * S, y * S, r * S, 0, Math.PI * 2); g.fill();
+  };
+  const RED = '#c22532', RED_D = '#8b141f', GOLD = '#e9b93e', GOLD_D = '#b3852a';
+  const DARK = '#242a36', GLOW = '#cdf4ff';
+
+  px(0, 0, 1, 1, RED);
+  // --- head front: gold faceplate, lit slits ---
+  px(0, 0, .5, .5, RED);
+  px(.05, .07, .40, .33, GOLD);
+  px(.05, .07, .40, .035, GOLD_D);                 // brow shadow
+  px(.05, .36, .40, .04, GOLD_D);                  // jaw shadow
+  px(.09, .18, .12, .055, GLOW);                   // eye slits
+  px(.29, .18, .12, .055, GLOW);
+  px(.15, .30, .20, .025, DARK);                   // mouth vent
+  // --- head sides / back: helmet ---
+  px(.5, 0, .5, .5, RED);
+  px(.5, 0, .5, .17, RED_D);                       // crown (the HAIR rect)
+  px(.5, .21, .5, .045, GOLD_D);                   // side band
+  px(.5, .30, .09, .10, DARK);                     // ear intake
+  // --- torso ---
+  px(0, .5, .5, .5, RED);
+  px(0, .5, .5, .07, GOLD_D);                      // collar
+  px(.03, .60, .44, .26, RED_D);                   // chest plate
+  disc(.25, .70, .105, GOLD);                      // the reactor, three rings
+  disc(.25, .70, .075, GLOW);
+  disc(.25, .70, .035, '#ffffff');
+  px(0, .93, .5, .07, GOLD_D);                     // hem
+  // --- limbs quadrant: sleeve / hip / leg / boot ---
+  px(.5, .5, .5, .18, RED);
+  px(.5, .68, .5, .16, GOLD);                      // hip armour
+  px(.5, .84, .5, .16, RED);
+  px(.5, .93, .5, .07, GOLD);                      // boot
   return cv;
 }
 

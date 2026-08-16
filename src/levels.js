@@ -951,7 +951,7 @@ export const LEVELS = [
     B.enemy('jelly', 0, 11, -51, { bob: 3.6 });
     // A staircase with 12u of open water above it is not a staircase — you rise
     // past the lot. An overhang keeps the climb in the pillars where it belongs.
-    B.box(0, 22, -51, 26, 30, 4, 'rock');                    // overhang: y 18 .. 22
+    B.roof(0, 22, -51, 26, 30, 4, 'rock');                   // overhang: y 18 .. 22
 
     /* --- D: a shelf with a hole in it. Go DOWN ---------------------------- */
     B.floor(-8, 12, -76, 10, 16, 'rock');                    // x -13 .. -3
@@ -1006,7 +1006,7 @@ export const LEVELS = [
     // hangs at 13.5, so the two low crowns (11) still leave a swimmable slot
     // over the top and the tall one (12.5) does not — some you thread, some you
     // skim, which is a choice rather than a corridor.
-    B.box(0, 17.5, -169, 26, 36, 4, 'rock');                 // shelf: y 13.5 .. 17.5
+    B.roof(0, 17.5, -169, 26, 36, 4, 'rock');                // shelf: y 13.5 .. 17.5
     B.enemy('grumblin', -6, 0, -174, { axis: 'x', range: 8 });
     B.enemy('grumblin', 6, 0, -184, { axis: 'x', range: 7 });
     B.checkpoint(0, 0, -185);                                // 134u from the last one otherwise
@@ -1067,7 +1067,7 @@ export const LEVELS = [
     B.crateRow(-3.9, 2.4, -306, 4, 'plain', [2.6, 0, 0]);
     B.starLine(-8, 3.8, -300, 2, [0, 0, -2.2]);
     B.starLine(8, 3.8, -314, 2, [0, 0, -2.2]);
-    B.box(0, 16, -309, 22, 26, 4, 'rock');                   // lid: fight the arena, don't float over it
+    B.roof(0, 16, -309, 22, 26, 4, 'rock');                  // lid: fight the arena, don't float over it
 
     /* --- L: the fork. Low tunnel pays, high road is safe ------------------ */
     B.floor(0, 2.4, -334, 12, 22, 'sand');                   // z -345 .. -323
@@ -1091,7 +1091,7 @@ export const LEVELS = [
     B.enemy('flapjack', 0, 12.5, -380, { axis: 'x', range: 6, bob: 1.8 });
     B.enemy('flapjack', 0, 12.0, -388, { axis: 'x', range: 6, bob: 1.6 });
     B.starLine(0, 13, -366, 3, [0, 0, -10.0], 2.4);
-    B.box(0, 20, -378, 26, 40, 4, 'rock');                   // roof: the flock is the gate, so you can't rise over it
+    B.roof(0, 20, -378, 26, 40, 4, 'rock');                  // roof: the flock is the gate, so you can't rise over it
 
     /* --- N: the springboard launch --------------------------------------- */
     // A spring bounce is fixed at 23.2 up, which under swim gravity is a 24u
@@ -1216,7 +1216,7 @@ export const LEVELS = [
     // platforms — gates to thread, lintels to duck, columns to weave, plugs to
     // smash, and five perches to land on. ceilY 40 is the sky, and the only
     // reason it stays a course instead of open air.
-    B.ground(-26, 'rock');                                   // the asteroid plain, far below
+    B.ground(-26, 'panel');                                  // the station deck, far below
 
     // A wall across the whole corridor with windows punched in it. `holes` is
     // [centreX, halfWidth, y0, y1] in LEFT-TO-RIGHT order; the piers between
@@ -1267,15 +1267,15 @@ export const LEVELS = [
     B.enemy('zapdrone', -11, 16, -48, { axis: 'x', range: 12 });
 
     /* --- C: the column forest. Weave, don't climb ------------------------- */
-    B.wall(-9, 30, -66, 5, 5, 30, 'rock');
-    B.wall(9, 13, -66, 5, 5, 13, 'rock');
-    B.wall(-9, 13, -78, 5, 5, 13, 'rock');
-    B.wall(9, 30, -78, 5, 5, 30, 'rock');
-    B.wall(0, 30, -90, 5, 5, 30, 'rock');                    // the three-wide pinch
-    B.wall(-13, 13, -90, 5, 5, 13, 'rock');
-    B.wall(13, 13, -90, 5, 5, 13, 'rock');
-    B.wall(-9, 30, -102, 5, 5, 30, 'rock');
-    B.wall(9, 13, -102, 5, 5, 13, 'rock');
+    B.wall(-9, 30, -66, 5, 5, 30, 'panel');
+    B.wall(9, 13, -66, 5, 5, 13, 'panel');
+    B.wall(-9, 13, -78, 5, 5, 13, 'panel');
+    B.wall(9, 30, -78, 5, 5, 30, 'panel');
+    B.wall(0, 30, -90, 5, 5, 30, 'panel');                    // the three-wide pinch
+    B.wall(-13, 13, -90, 5, 5, 13, 'panel');
+    B.wall(13, 13, -90, 5, 5, 13, 'panel');
+    B.wall(-9, 30, -102, 5, 5, 30, 'panel');
+    B.wall(9, 13, -102, 5, 5, 13, 'panel');
     // One continuous weave rather than two trails with a hole in the middle.
     B.star(2, 11, -64); B.star(0, 11, -70); B.star(-2, 11, -76);
     B.star(-4, 11, -82); B.star(-6, 11, -88); B.star(-6, 11, -94);
@@ -1285,7 +1285,7 @@ export const LEVELS = [
     // A forest you can climb over is not a forest. The tall columns top out at
     // 30 and the sky is 40, so without this you hold SPACE, sit at the ceiling
     // and the whole weave is decoration. Same trick as the L baffles.
-    B.wall(0, SKY, -84, 56, 52, 10, 'rock');                 // roof: y 30 .. 40
+    B.roof(0, SKY, -84, 56, 52, 10, 'panel');                 // roof: y 30 .. 40
 
     /* --- D: perch one. Land, smash, save --------------------------------- */
     B.floor(0, 10, -112, 16, 12, 'metal');                   // z -118 .. -106
@@ -1305,9 +1305,9 @@ export const LEVELS = [
 
     /* --- F: the staircase of pads, climbing out of the underdeck ---------- */
     B.floor(0, 6, -170, 10, 9, 'metal');                     // z -174.5 .. -165.5
-    B.floor(-8, 12, -181, 9, 9, 'ice');                      // z -185.5 .. -176.5
-    B.floor(8, 18, -192, 9, 9, 'ice');                       // z -196.5 .. -187.5
-    B.floor(-8, 24, -203, 9, 9, 'ice');                      // z -207.5 .. -198.5
+    B.floor(-8, 12, -181, 9, 9, 'deck');                      // z -185.5 .. -176.5
+    B.floor(8, 18, -192, 9, 9, 'deck');                       // z -196.5 .. -187.5
+    B.floor(-8, 24, -203, 9, 9, 'deck');                      // z -207.5 .. -198.5
     B.star(0, 8.5, -170); B.star(-8, 14.5, -181);
     B.star(0, 16, -186.5); B.star(8, 20.5, -192); B.star(-8, 26.5, -203);
     B.crate(5, 18, -190, 'plain');
@@ -1316,7 +1316,7 @@ export const LEVELS = [
     B.enemy('prickle', 11, 18, -194, {});
     B.enemy('flapjack', 0, 14.4, -178, { axis: 'x', range: 8, bob: 1.6 });
     B.enemy('zapdrone', 0, 20, -195, { axis: 'x', range: 12 });
-    B.wall(0, SKY, -185, 56, 44, 10, 'rock');                // roof: climb the pads, not past them
+    B.roof(0, SKY, -185, 56, 44, 10, 'panel');                // roof: climb the pads, not past them
 
     /* --- G: perch two, high up ------------------------------------------- */
     B.floor(0, 29, -214, 16, 12, 'metal');                   // z -220 .. -208
@@ -1326,10 +1326,10 @@ export const LEVELS = [
     B.starLine(-6, 31, -210, 3, [0, 0, -2.5]);
 
     /* --- H: over, under, over, under. Four bars across the sky ------------ */
-    B.wall(0, 44, -224, 56, 5, 26, 'rock');                  // y 18 .. 44 — go UNDER
-    B.wall(0, 18, -236, 56, 5, 18, 'rock');                  // y 0 .. 18  — go OVER
-    B.wall(0, 44, -248, 56, 5, 24, 'rock');                  // y 20 .. 44 — UNDER
-    B.wall(0, 22, -260, 56, 5, 22, 'rock');                  // y 0 .. 22  — OVER
+    B.wall(0, 44, -224, 56, 5, 26, 'panel');                  // y 18 .. 44 — go UNDER
+    B.wall(0, 18, -236, 56, 5, 18, 'panel');                  // y 0 .. 18  — go OVER
+    B.wall(0, 44, -248, 56, 5, 24, 'panel');                  // y 20 .. 44 — UNDER
+    B.wall(0, 22, -260, 56, 5, 22, 'panel');                  // y 0 .. 22  — OVER
     B.starLine(-3, 12.5, -224, 2, [6, 0, 0]);
     B.starLine(-3, 20.5, -236, 2, [6, 0, 0]);
     B.starLine(-3, 15, -248, 2, [6, 0, 0]);
@@ -1342,13 +1342,13 @@ export const LEVELS = [
     // Every other wall in the level is a hole you thread. These three are
     // BLOCKED on the flight line, and X is the only thing that opens them —
     // the fast route is the paying route, the clean route is the long way.
-    gate(-272, [plug(-272, -2, 10, ['plain', 'plain', 'plain', 'star']), [12, 5, 8, 20]], 'ice');
+    gate(-272, [plug(-272, -2, 10, ['plain', 'plain', 'plain', 'star']), [12, 5, 8, 20]], 'deck');
     B.star(-2, 12.5, -267); B.star(-2, 12.5, -277);
     B.star(12, 13, -267); B.star(12, 13, -277);
-    gate(-288, [[-13, 5, 14, 26], plug(-288, 3, 12, ['plain', 'plain', 'plain', 'plain'])], 'ice');
+    gate(-288, [[-13, 5, 14, 26], plug(-288, 3, 12, ['plain', 'plain', 'plain', 'plain'])], 'deck');
     B.star(3, 14.5, -283); B.star(3, 14.5, -293);
     B.star(-13, 19, -283); B.star(-13, 19, -293);
-    gate(-304, [plug(-304, -3, 16, ['plain', 'plain', 'plain', 'life']), [13, 5, 6, 18]], 'ice');
+    gate(-304, [plug(-304, -3, 16, ['plain', 'plain', 'plain', 'life']), [13, 5, 6, 18]], 'deck');
     B.star(-3, 18.5, -299); B.star(-3, 18.5, -309);
     B.star(13, 11, -299); B.star(13, 11, -309);
     B.enemy('zapdrone', 5, 16, -280, { axis: 'x', range: 16 });
@@ -1362,7 +1362,7 @@ export const LEVELS = [
     B.crate(-4, 12, -330, 'plain');
     B.crate(0, 12, -335, 'life');
     B.star(0, 15, -329);
-    B.floor(-22, 22, -340, 10, 10, 'ice');                   // the risky detour
+    B.floor(-22, 22, -340, 10, 10, 'deck');                   // the risky detour
     B.crate(-22, 22, -342, 'star');
     B.star(-12, 18, -336);
     B.starLine(-22, 24.5, -337, 2, [0, 0, -3]);
@@ -1376,20 +1376,20 @@ export const LEVELS = [
     B.star(0, 19, -358); B.star(0, 22, -370);
     B.star(6, 24, -376); B.star(0, 26, -382); B.star(0, 29, -394);
     B.enemy('zapdrone', 0, 20, -376, { axis: 'x', range: 14 });
-    B.wall(0, SKY, -377, 56, 52, 10, 'rock');                // roof: ride the movers, don't overfly them
+    B.roof(0, SKY, -377, 56, 52, 10, 'panel');                // roof: ride the movers, don't overfly them
 
     /* --- L: the chicane. Baffles off alternate walls, floor to sky -------- */
     // Was two side walls you could simply fly over the top of, which made the
     // "narrow" slabs decoration. Now each baffle seals half the corridor for
     // its full height, so the opening really does swap sides every 12u.
-    gate(-406, [[14, 14, 0, SKY]], 'rock', 5);               // open x 0 .. 28
-    gate(-418, [[-14, 14, 0, SKY]], 'rock', 5);              // open x -28 .. 0
-    gate(-430, [[14, 14, 4, SKY]], 'rock', 5);               // open right, over a sill
-    gate(-442, [[-14, 14, 6, SKY]], 'rock', 5);              // open left, higher sill
-    B.floor(12, 8, -412, 10, 7, 'ice');                      // z -415.5 .. -408.5
-    B.floor(-12, 12, -424, 10, 7, 'ice');
-    B.floor(12, 16, -436, 10, 7, 'ice');
-    B.floor(-12, 20, -448, 10, 7, 'ice');
+    gate(-406, [[14, 14, 0, SKY]], 'panel', 5);               // open x 0 .. 28
+    gate(-418, [[-14, 14, 0, SKY]], 'panel', 5);              // open x -28 .. 0
+    gate(-430, [[14, 14, 4, SKY]], 'panel', 5);               // open right, over a sill
+    gate(-442, [[-14, 14, 6, SKY]], 'panel', 5);              // open left, higher sill
+    B.floor(12, 8, -412, 10, 7, 'deck');                      // z -415.5 .. -408.5
+    B.floor(-12, 12, -424, 10, 7, 'deck');
+    B.floor(12, 16, -436, 10, 7, 'deck');
+    B.floor(-12, 20, -448, 10, 7, 'deck');
     B.star(14, 10.5, -406); B.star(12, 10, -412);
     B.star(-14, 14, -418); B.star(-12, 14, -424);
     B.star(14, 18, -430); B.star(12, 18, -436);
@@ -1415,10 +1415,10 @@ export const LEVELS = [
     // coming straight down the corridor at you, and the loot on the deck so
     // you have to go down where they are to get it.
     B.floor(0, 4, -505, 34, 60, 'metal');                    // z -535 .. -475
-    B.wall(-30, SKY, -505, 4, 60, SKY, 'rock');              // sealed hall
-    B.wall(30, SKY, -505, 4, 60, SKY, 'rock');
-    B.wall(-9, 26, -492, 7, 7, 22, 'rock');                  // two pillars, for cover
-    B.wall(9, 30, -518, 7, 7, 26, 'rock');
+    B.wall(-30, SKY, -505, 4, 60, SKY, 'panel');              // sealed hall
+    B.wall(30, SKY, -505, 4, 60, SKY, 'panel');
+    B.wall(-9, 26, -492, 7, 7, 22, 'panel');                  // two pillars, for cover
+    B.wall(9, 30, -518, 7, 7, 26, 'panel');
     B.starLine(0, 9, -478, 3, [-2, 0, -6]);                  // round the first pillar
     B.starLine(-4, 10, -498, 3, [4, 0, -6]);
     B.starLine(2, 9, -516, 4, [-4, 0, -5]);                  // round the second
@@ -1431,7 +1431,7 @@ export const LEVELS = [
     B.enemy('zapdrone', -10, 15, -522, { axis: 'x', range: 18 });
     // The hall was sealed on the sides and open to the sky, so the traffic was
     // avoidable by flying over all of it. Now it is a hall.
-    B.wall(0, SKY, -505, 56, 60, 10, 'rock');                // roof: y 30 .. 40
+    B.roof(0, SKY, -505, 56, 60, 10, 'panel');                // roof: y 30 .. 40
     B.enemy('flapjack', 6, 8, -530, { axis: 'x', range: 12, bob: 2.4 });
 
     /* --- N2: the launch ledge. Save BEFORE the climb, not after ----------- */

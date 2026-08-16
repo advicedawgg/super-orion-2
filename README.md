@@ -120,7 +120,8 @@ An audio LLM could not answer this question — it failed its control — but so
 
 **Textures** still generate into canvases at boot, so the game has zero *required* asset files. Drop-in
 slot: put `assets/tex/<name>.png` in place and add `<name>` to `REAL` in `src/art.js`. Krea 2 is the
-intended source.
+intended source. The flight level's `deck` and `panel` and both Orion atlases are procedural — they
+tile by construction, which a generated image does not.
 
 **SFX stay synthesised on purpose.** A generated wav of a jump blip is worse than four lines of WebAudio
 and has to be downloaded.

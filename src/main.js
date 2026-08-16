@@ -419,7 +419,8 @@ In.cheat('star', () => { G.stars += 10; toast('⭐ +10'); Sound.sfx('star'); dra
 async function boot() {
   // Painting the procedural textures costs a few hundred ms; do it up front
   // with a yield between each so the loading bar actually moves.
-  const names = ['grass', 'rock', 'dirt', 'sand', 'wood', 'crate', 'ice', 'metal', 'orion'];
+  const names = ['grass', 'rock', 'dirt', 'sand', 'wood', 'crate', 'ice', 'metal',
+                 'deck', 'panel', 'orion', 'orionSuit'];
   const bar = $('loadbar').querySelector('i');
   for (let i = 0; i < names.length; i++) {
     tex(names[i]);

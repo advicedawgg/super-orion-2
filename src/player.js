@@ -88,8 +88,28 @@ export function buildOrion() {
   const hose = new THREE.Mesh(new THREE.TorusGeometry(.16, .035, 5, 10, Math.PI), brass);
   hose.position.set(0, 1.02, -.22); hose.rotation.set(Math.PI / 2, 0, 0); scuba.add(hose);
 
+  // Flight armour. The atlas does the plating (see orionSuitAtlas in art.js);
+  // this is the silhouette the atlas cannot give you — a reactor that stands
+  // proud of the chest, pauldrons, and a crest — because from behind, which is
+  // the only angle this game has, a repaint alone changes nothing.
+  const flight = new THREE.Group(); flight.visible = false; body.add(flight);
+  const gold = new THREE.MeshLambertMaterial({ color: 0xe9b93e });
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(.13, .13, .07, 12),
+    new THREE.MeshBasicMaterial({ color: 0xcdf4ff }));
+  core.rotation.x = Math.PI / 2; core.position.set(0, .80, .21); flight.add(core);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(.15, .035, 6, 14), gold);
+  ring.position.set(0, .80, .20); flight.add(ring);
+  for (const s of [-1, 1]) {
+    const pad = new THREE.Mesh(new THREE.SphereGeometry(.21, 8, 6, 0, Math.PI * 2, 0, Math.PI * .55), gold);
+    pad.position.set(s * .35, 1.01, 0); pad.rotation.z = s * .38;
+    pad.scale.set(1, .62, .9);                   // a plate, not a shoulder pad
+    flight.add(pad);
+  }
+  const crest = new THREE.Mesh(new THREE.ConeGeometry(.09, .26, 4), gold);
+  crest.position.set(0, 1.52, -.02); flight.add(crest);
+
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  return { root, body, head, torso, armL, armR, legL, legR, scuba };
+  return { root, body, head, torso, armL, armR, legL, legR, mat, scuba, flight };
 }
 
 /* --------------------------------------------------------------- player */
@@ -139,6 +159,11 @@ export class Player {
     this.jetFx.visible = false;
     this.tank = 1;
     this.rig.scuba.visible = mode === 'swim';
+    this.rig.flight.visible = mode === 'jet';
+    // One material, two atlases. `needsUpdate` is not optional — swapping a map
+    // on a live material without it keeps the old texture bound.
+    this.rig.mat.map = tex(mode === 'jet' ? 'orionSuit' : 'orion');
+    this.rig.mat.needsUpdate = true;
   }
 
   /** True when this mode meters its lift — main.js shows the gauge for it. */
@@ -276,6 +301,15 @@ export class Player {
         const b = Math.sin(performance.now() / 520);
         r.body.position.y = b * .022; r.head.rotation.z = b * .05;
       } else r.head.rotation.z = 0;
+    }
+    // Under thrust: arms down and swept back, legs trailing, chest lifted. The
+    // airborne pose above is a JUMP pose — arms overhead — and on a flying suit
+    // it reads as falling, which is the opposite of what the button is doing.
+    if (this.thrusting) {
+      r.armL.rotation.x = r.armR.rotation.x = .34;
+      r.armL.rotation.z = .55; r.armR.rotation.z = -.55;
+      r.legL.rotation.x = r.legR.rotation.x = .14;
+      r.body.rotation.x = -.20;
     }
     if (this.spinning) { r.armL.rotation.z = 1.5; r.armR.rotation.z = -1.5; r.armL.rotation.x = r.armR.rotation.x = 0; }
 
