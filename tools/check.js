@@ -6,7 +6,7 @@
 // from the tuning, and fails if the goal, a checkpoint, a crate or a star
 // can't be reached. Eyeballing level geometry does not work. This does.
 
-import { LEVELS } from '../src/levels.js';
+import { LEVELS, HUB } from '../src/levels.js';
 import { buildLevel, killPlane, FLOATING, BODY } from '../src/builder.js';
 import { T, tuning, isFreeMode, hasTank } from '../src/physics.js';
 
@@ -83,7 +83,10 @@ let failures = 0, warnings = 0;
 const fail = m => { console.log(`  ✗ ${m}`); failures++; };
 const warn = m => { console.log(`  ! ${m}`); warnings++; };
 
-for (const def of LEVELS) {
+// The hub is authored with the same Builder and gets the same class of mistake
+// — a floating tree, a portal you cannot walk to — so it goes through the same
+// gate. `def.hub` turns off only the two checks that assume a level has an end.
+for (const def of [...LEVELS, HUB]) {
   const t = tuning(def.mode);
   const free = isFreeMode(t);                 // swim / jet: vertical travel is unbounded
   const { H1, H2, reach } = arcs(t);
@@ -93,7 +96,7 @@ for (const def of LEVELS) {
   const plats = d.solids.filter(s => !s.scenery)
     .map(s => ({ s, r: rect(s), top: s.y, spring: s.crate?.kind === 'spring' }));
 
-  if (!d.goal) fail('no goal');
+  if (!d.goal && !def.hub) fail('no goal');
   if (!def.start) fail('no start');
   if (def.killY === undefined && !d.ground) fail('needs either a ground() or an explicit killY');
   // A stroke or a thruster climbs forever. Without a roof the level is not a
@@ -212,6 +215,14 @@ for (const def of LEVELS) {
   });
 
   if (d.goal && !canLand(d.goal, 3.4, H1 + H2 + 2, 4)) fail(`goal at z=${d.goal.z.toFixed(0)} is unreachable`);
+  // A portal you cannot walk to is a level you cannot play.
+  for (const p of d.portals || []) {
+    if (!canLand(p, 3.0, H1 + 2, 3))
+      fail(`portal to level ${p.level} at (${p.x},${p.z}) is unreachable`);
+    if (LEVELS[p.level] === undefined) fail(`portal points at level ${p.level}, which does not exist`);
+  }
+  if (def.hub && (d.portals || []).length !== LEVELS.length)
+    fail(`hub has ${(d.portals || []).length} portals for ${LEVELS.length} levels`);
   for (const c of d.checkpoints)
     if (!canLand(c, 2.8, H1 + 2, 3)) fail(`checkpoint at z=${c.z.toFixed(0)} is unreachable`);
   // Crates ARE platforms, so reachability is exact — no modelling needed.
@@ -219,6 +230,21 @@ for (const def of LEVELS) {
   if (badCrates.length) fail(`${badCrates.length} crate(s) unreachable, e.g. ${badCrates.slice(0, 3).map(c => `(${c.x.toFixed(0)},${c.y.toFixed(1)},${c.z.toFixed(0)})`).join(' ')}`);
   const badStars = d.stars.filter(s => !canPass(s, 1.35));
   if (badStars.length) fail(`${badStars.length} star(s) unreachable, e.g. ${badStars.slice(0, 3).map(s => `(${s.x.toFixed(0)},${s.y.toFixed(1)},${s.z.toFixed(0)})`).join(' ')}`);
+
+  // Crates FALL now when nothing holds them up, so a crate authored over thin
+  // air is no longer a floating crate — it is a crate that quietly relocates
+  // the moment the level loads, taking its stars somewhere you didn't put them.
+  for (const c of d.crates) {
+    const b = { x0: c.x - 0.9, x1: c.x + 0.9, z0: c.z - 0.9, z1: c.z + 0.9 };
+    const held = d.solids.some(s => {
+      if (s.crate === c || s.scenery) return false;
+      const r = rect(s);
+      return r.x1 > b.x0 + 0.02 && r.x0 < b.x1 - 0.02
+        && r.z1 > b.z0 + 0.02 && r.z0 < b.z1 - 0.02
+        && Math.abs(s.y - c.y) < 0.05;
+    });
+    if (!held) fail(`crate at (${c.x},${c.y},${c.z}) has nothing under it — it will fall on load`);
+  }
 
   // Ground enemies need floor. A grumblin in mid-air is a level-design typo.
   for (const e of d.enemies) {

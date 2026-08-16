@@ -1,7 +1,7 @@
 // Turns a level's plain data (src/builder.js) into meshes, then runs
 // everything that isn't the player: stars, crates, enemies, movers, goal.
 import * as THREE from 'three';
-import { tex, skyTexture, crateFace } from './art.js';
+import { tex, skyTexture, crateFace, signTexture } from './art.js';
 import { bounds, T } from './physics.js';
 import { buildLevel, killPlane, CRATE_SIZE, BODY } from './builder.js';
 
@@ -94,6 +94,7 @@ export class World {
     this.enemies = data.enemies.map(e => this.addEnemy(e));
     this.checkpoints = data.checkpoints.map(c => this.addCheckpoint(c));
     for (const t of data.trees) this.addTree(t);
+    this.portals = (data.portals || []).map(p => this.addPortal(p));
     if (this.goalPos) this.addGoal();
 
     this.totalStars = this.stars.length + this.crates.reduce((n, c) => n + (CRATE[c.kind]?.stars || 0), 0);
@@ -181,7 +182,9 @@ export class World {
     const top = topper(c.kind);
     if (top) m.add(top);
     this.group.add(m);
-    return { s, mesh: m, kind: c.kind, alive: true };
+    // settling=true on the first frame so an authored stack validates itself,
+    // and so a crate placed over nothing falls instead of hanging there.
+    return { s, mesh: m, kind: c.kind, alive: true, vy: 0, settling: true };
   }
 
   addEnemy(d) {
@@ -204,6 +207,46 @@ export class World {
     flag.position.set(.65, 2.8, 0); g.add(flag);
     this.group.add(g);
     return { g, flag, pos: new THREE.Vector3(p.x, p.y, p.z), lit: false };
+  }
+
+  /** A doorway in the hub. Not solid — you walk INTO it, that is the input. */
+  addPortal(p) {
+    const g = new THREE.Group(); g.position.set(p.x, p.y, p.z);
+    const accent = 0xffd23f;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.75, .22, 8, 22),
+      new THREE.MeshLambertMaterial({ color: accent, emissive: 0x5a4300 }));
+    ring.position.y = 2.1; ring.castShadow = true; g.add(ring);
+    // The eye of the portal. Additive-ish and unlit so it glows in any level's
+    // lighting, and double-sided because you can walk round the back of it.
+    const eye = new THREE.Mesh(new THREE.CircleGeometry(1.6, 22),
+      new THREE.MeshBasicMaterial({ color: 0x8fd8ff, transparent: true, opacity: .45, side: THREE.DoubleSide }));
+    eye.position.y = 2.1; g.add(eye);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.8, .35, 12), surface('rock'));
+    base.position.y = .17; base.castShadow = base.receiveShadow = true; g.add(base);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 1.5),
+      new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide }));
+    sign.position.y = 4.5; g.add(sign);
+    this.group.add(g);
+    return { g, ring, eye, sign, level: p.level, signY: 4.5,
+             pos: new THREE.Vector3(p.x, p.y, p.z) };
+  }
+
+  /**
+   * Fill in the placards. main.js owns the save file, so it hands us a lookup
+   * rather than World reaching into localStorage — the same reason the fx
+   * callback exists.
+   */
+  labelPortals(info) {
+    for (const p of this.portals) {
+      const { title, sub, accent } = info(p.level);
+      p.sign.material.map?.dispose();
+      p.sign.material.map = signTexture(title, sub, accent);
+      p.sign.material.needsUpdate = true;
+      p.ring.material = p.ring.material.clone();
+      p.ring.material.color.set(accent);
+      p.eye.material = p.eye.material.clone();
+      p.eye.material.color.set(accent);
+    }
   }
 
   addGoal() {
@@ -268,6 +311,7 @@ export class World {
       }
     }
 
+    this.settleCrates(dt);
     for (const c of this.crates) if (c.alive) this.touchCrate(c, player);
     for (const e of this.enemies) if (e.alive) this.updateEnemy(e, dt, player);
 
@@ -279,6 +323,13 @@ export class World {
         cp.flag.material.color.set(0xff5d73);
         this.fx('checkpoint', cp.pos);
       }
+    }
+
+    for (const p of this.portals) {
+      p.ring.rotation.z += dt * .55;
+      p.sign.position.y = p.signY + Math.sin(this.time * 1.8 + p.level) * .13;
+      p.eye.scale.setScalar(1 + Math.sin(this.time * 2.4 + p.level) * .04);
+      if (near(player.pos, p.pos, 2.1, 3.4)) return { portal: p.level };
     }
 
     if (this.goalMesh) {
@@ -304,6 +355,58 @@ export class World {
     }
   }
 
+  /** Highest solid top that could hold `s` up, or null for nothing under it. */
+  supportUnder(s) {
+    const b = bounds(s);
+    let best = null;
+    for (const o of this.solids) {
+      if (o === s) continue;
+      const ob = o._b || (o._b = bounds(o));
+      // Must OVERLAP in plan, not merely contain the centre point: a pyramid's
+      // upper crates straddle the gap between the two below them, so a centre
+      // test says "nothing under me" and drops the whole stack on level load.
+      if (ob.x1 <= b.x0 + 0.02 || ob.x0 >= b.x1 - 0.02) continue;
+      if (ob.z1 <= b.z0 + 0.02 || ob.z0 >= b.z1 - 0.02) continue;
+      if (ob.y1 > b.y0 + 0.02) continue;               // and be below our feet
+      if (best === null || ob.y1 > best) best = ob.y1;
+    }
+    return best;
+  }
+
+  /**
+   * Crates fall when what they were sitting on stops existing. Smash the bottom
+   * of a stack and the rest used to hang in mid-air, which is the one thing a
+   * crate must never do — the whole point of a stack is that it is a stack.
+   *
+   * Only crates flagged `settling` are tested, and a crate stops being restless
+   * the moment it lands, so the usual per-frame cost is nothing.
+   */
+  settleCrates(dt) {
+    for (const c of this.crates) {
+      if (!c.alive || !c.settling) continue;
+      const s = c.s;
+      const rest = this.supportUnder(s);
+      const floor = rest === null ? -Infinity : rest + CRATE_SIZE;
+      if (s.y <= floor + 0.02) { c.vy = 0; c.settling = false; s.y = Math.max(s.y, floor); continue; }
+      c.vy -= 62 * dt;                                  // same gravity the player falls at
+      let y = s.y + c.vy * dt;
+      if (y <= floor) { y = floor; c.vy = 0; c.settling = false; }
+      s.y = y; s._b = null;
+      c.mesh.position.y = y - CRATE_SIZE / 2;
+      // Into the void: a crate that falls out of the level is gone, not a
+      // collider sitting a mile below the kill plane waiting to be landed on.
+      if (y < this.killY) {
+        c.alive = false; c.settling = false; c.mesh.visible = false;
+        const i = this.solids.indexOf(s); if (i >= 0) this.solids.splice(i, 1);
+      }
+    }
+  }
+
+  /** Anything resting above the gap a smashed crate left has to look again. */
+  disturbCrates(fromY) {
+    for (const c of this.crates) if (c.alive && c.s.y > fromY) c.settling = true;
+  }
+
   touchCrate(c, player) {
     const p = player.pos, b = c.s._b || (c.s._b = bounds(c.s));
     const touching = p.x + T.PW / 2 > b.x0 - .3 && p.x - T.PW / 2 < b.x1 + .3
@@ -316,6 +419,7 @@ export class World {
     if (!fromAbove && !player.spinning && !player.stomping) return;
     c.alive = false; c.mesh.visible = false;
     const i = this.solids.indexOf(c.s); if (i >= 0) this.solids.splice(i, 1);
+    this.disturbCrates(c.s.y - CRATE_SIZE);
     if (player.vel.y < 0 && !player.stomping) player.bounce(T.JUMP_V * .6);
     this.fx('crate', c.mesh.position, info);
   }
