@@ -37,9 +37,13 @@ frame for the whole coyote window. None of those were visible in the diff.
   `src/physics.js`). Add to that list rather than duplicating a derivation. A checker that
   models the world separately is a checker that lies.
 - A level's `mode` (`'swim'` / `'jet'`) is a patch on `T`, read by both the game and the
-  checker through `tuning(def.mode)`. Both are **free modes** — vertical travel is unbounded,
-  so they REQUIRE a `ceilY`, and the checker deliberately stops proving reachability there.
+  checker through `tuning(def.mode)`. Both REQUIRE a `ceilY`, and both meter lift with a
+  **tank** that only refills on solid ground — that is what stops you swimming or flying
+  over the entire level. The checker proves tank range instead of jump arcs there.
   See AGENTS.md → Movement modes.
+- **The camera must never lose sight of Orion.** `keepOrionInSight()` hides whatever is
+  between it and him. Do not replace that with a shorter boom — the corridor walls are
+  56u wide and pulling in parks the camera inside one. See AGENTS.md.
 
 ## Running it
 
@@ -51,12 +55,15 @@ npx http-server -p 8791 -c-1      # -c-1 matters; http-server caches for an hour
 
 ## What to work on
 
-See **`README.md` → Next**. The previous playtest list is done: 5 levels totalling 3,154u
-(was 2 levels and 358u), crates carry a stencil and a topper, the coast track is re-rolled,
-and swim + jetpack shipped as `mode` patches on the tuning.
+See **`README.md` → Next**. The 2026-08-16 playtest round is done: the spin has an audible
+sound, the flapjack is an actual bat rather than two spinning billboards, the camera cuts
+away anything blocking Orion, the reef is a scuba dive with bubbles, both free modes meter
+lift with a tank, and twelve enemies that patrolled through solid rock were found by a new
+checker pass and fixed.
 
-What is left is mostly **things a machine cannot check**: whether the difficulty curve
-actually suits Orion, and whether the four new music tracks sound right. Both need a human.
+What is left is mostly **things a machine cannot check**: whether the difficulty curve suits
+Orion, whether the tank makes the reef and the flight level better or just annoying, and
+whether the re-rolled `frost.mp3` (seed 2077) still sings. All need a human.
 
 ## Generating assets
 

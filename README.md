@@ -20,8 +20,8 @@ repo is the deployable artifact. Deploy with `npx wrangler deploy`.
 |---|---|
 | ← → ↑ ↓ / WASD | Move (camera-relative) |
 | SPACE | Jump — press again in the air for a **double jump** |
-| SPACE (underwater) | **Swim stroke** — tap over and over to rise; there is no limit |
-| SPACE (jetpack) | **Hold to fly**, let go to drop. There is no jump in a flight level |
+| SPACE (underwater) | **Swim stroke** — tap to rise. A lungful is 8 strokes; touch the bottom to refill |
+| SPACE (jetpack) | **Hold to fly**, let go to drop. 4s of fuel, refilled by landing. No jump at all |
 | X | **Spin attack** — kills most things without landing on them |
 | C (in the air) | **Ground pound** — straight down, smashes crates |
 | P / ESC | Pause · R restart · M music · F fullscreen |
@@ -31,9 +31,15 @@ Gamepad and touch are wired up too (Steam Deck, phone, tablet).
 ## The shape of it
 
 Crash-style: the camera rides a fixed rig behind Orion and the level is a 3D corridor you run *through*,
-rather than an open world you get lost in. That was a deliberate choice — it means no camera-collision
-jank, a kid never ends up facing a wall, and the later underwater and jetpack levels are just different
-camera rigs on the same engine.
+rather than an open world you get lost in. That was a deliberate choice — a kid never ends up facing a
+wall, and the later underwater and jetpack levels are just different camera rigs on the same engine.
+
+A fixed rig has one failure mode, and it is not camera collision: it is **occlusion**. Walk round the
+back of the lighthouse, fly past a gate that spans the whole corridor, and the thing you are steering is
+behind a wall. Shortening the boom is the usual fix and it is the wrong one here — these walls are 56u
+wide, so pulling in parks the camera *inside* one. Instead, anything strictly between the camera and
+Orion simply stops being drawn. It only ever hides what he is already level with or past, never what he
+is flying toward, and it is one slab test per solid per frame.
 
 Art direction is "N64 shapes, 2026 lighting": chunky low-poly silhouettes and texture atlases like an
 N64 character, but crisp filtering, soft shadows and real fog.
@@ -51,6 +57,7 @@ N64 character, but crisp filtering, soft shadows and real fog.
 | `src/audio.js` | Synthesised SFX; music loads from `assets/audio/` if present. |
 | `src/main.js` | Renderer, camera rig, game loop, HUD. |
 | `tools/check.js` | **The gate.** See below. |
+| `tools/vocalcheck.py` | Is anyone *singing* on a generated track? Measures it instead of guessing. |
 
 ## The gate
 
@@ -66,6 +73,16 @@ mid-air enemy on the very first run. Eyeballing level geometry does not work; th
 
 It also warns when the level's hardest *required* jump eats more than 85% of the theoretical arc — that's
 the line between "satisfying" and "a seven-year-old gives up".
+
+Two more passes it runs:
+
+- **Tank range** (swim/jet only). Height is free in those modes, so the flood fill used to give up on
+  them entirely. It can't now: the tank only refills on solid ground, so the checker proves you can
+  cross the level one tankful at a time and fails if the goal or a checkpoint is beyond refuelling range.
+- **Swept patrols.** An enemy's *placed* position can be perfectly legal while half its circuit is
+  inside a rock — the diff looks fine and the screen does not. This sweeps the patrol volume through
+  the level and fails anything penetrating more than 0.4u. It found twelve on the first run, in all
+  five levels.
 
 **Never change the physics constants to fix a level.** Change the level.
 
@@ -87,6 +104,19 @@ whether you get near it. Empty lyrics → the model stops after ~14 seconds. Sec
 length; section *bodies* buy nothing and sometimes get sung. Same seed and caption, bodies the only
 difference: `(instrumental)` bodies gave 66s with audible wordless vocals, empty bodies gave the full
 100s. `genmusic.js` therefore sends empty bodies by default.
+
+The other non-obvious part: **asking for "no vocals" in the caption does not work.** Frostfizz Peaks
+was re-rolled three times with progressively firmer wording and sang every time. What fixed it was a
+real negative prompt (the graph had been feeding an empty one), a higher `cfg` so it bites, and
+rolling seeds until one measured clean:
+
+```sh
+python tools/vocalcheck.py                      # separates a vocals stem; PASS/FAIL per track
+SEED=4410 CFG=2.6 node tools/genmusic.js frost  # override for one screening run
+```
+
+Every track that shipped scores −10 dB of vocals or lower; the take that sang scored **+2.3 dB**.
+An audio LLM could not answer this question — it failed its control — but source separation does.
 
 **Textures** still generate into canvases at boot, so the game has zero *required* asset files. Drop-in
 slot: put `assets/tex/<name>.png` in place and add `<name>` to `REAL` in `src/art.js`. Krea 2 is the
@@ -127,11 +157,13 @@ What is worth doing next, in rough priority order:
 
 1. **Get Orion to play it and watch where he stops.** Five levels is a lot of new geometry that has
    only ever been proven by the checker and a scripted flythrough. The difficulty curve across the
-   five is an educated guess.
+   five is an educated guess — and the air/fuel tank is brand new, so the reef and the flight level
+   need a real run more than anything else here.
 2. **Listen to the new tracks.** Four of the five are freshly generated. The vocal-bleed fix is
    reasoned rather than heard — an audio model was tried and failed its control (`AGENTS.local.md`).
+   `frost.mp3` was re-rolled on 2026-08-16 (seed 4410, cfg 2.6) after three takes that sang; it now
+   measures cleaner than any other track in the game, but nobody has heard the new one yet.
 3. **A level-select screen.** Game 1 has one; here, reaching Cosmic Cannonball means playing four
    levels first, which is a lot to ask when you want to test the last one.
-4. `frost.mp3` masters ~3 dB quieter than the others. Not wrong, just noticeable if you switch levels.
 5. Backdrop trees are the mesh budget: Jungle Jog draws ~1470 meshes against ~800 for the others.
    Fine on a desktop GPU, and it is the first thing to instance if the Steam Deck struggles.

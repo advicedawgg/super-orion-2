@@ -48,17 +48,30 @@ the gate.
 | mode | lift | feel |
 |---|---|---|
 | *(none)* | jump, then double jump | the running game |
-| `swim` | every press is another stroke, no limit | low gravity, sinks at 6.5u/s |
+| `swim` | every press is another stroke | low gravity, sinks at 6.5u/s |
 | `jet` | HOLD to thrust, climb capped at 14u/s | no jump at all |
+
+Both metered modes carry a **tank** — a 0..1 gauge that only refills with your feet on solid ground
+(`tankStep`). Swimming spends 0.125 a stroke (8 strokes a lungful); the jetpack burns 0.25 a second
+(4 seconds of thrust). Without it, lift is free and a level of platforms you never have to land on is
+not a level: you swim or fly over the whole thing, which is exactly what the first playtest said.
+
+The tank is deliberately generous. It exists to make a platform worth landing on, not to turn
+traversal into resource management, and both shipped levels cleared the new checker pass unchanged.
 
 Both new modes are **free modes**: vertical travel is unbounded. Two consequences you
 cannot design around:
 
 - `ceilY` is **required** — the water surface, or the sky. It caps the player's feet.
   Without it the level stops being a corridor, because there is nothing above you.
-- The checker **does not prove reachability** in a free mode. A jump-arc flood fill
-  answers a question that isn't being asked when you can swim straight up. Geometry,
-  the ceiling and buried content are still enforced; the *layout* is on you.
+- The checker does not prove reachability from a **jump arc** in a free mode — that
+  question isn't being asked when you can swim straight up. It proves **tank range**
+  instead: can you get from the start to the goal one tankful at a time, refuelling
+  only on solids. That is a real gate and it will fail a level with a long stretch of
+  nothing to land on.
+- A ceiling is still your job. `ceilY` alone is not enough when the roof is 26 and the
+  content tops out at 12 — you just ride the ceiling over the lot. Both free levels now
+  hang local roofs over their loosest beats for exactly that reason.
 
 Ground pound is disabled in free modes on purpose: `stomping` suppresses both the
 stroke and the thruster until you land, so over water or a void it would take away
@@ -67,6 +80,27 @@ every means of lift you have.
 Floating enemies (`flapjack`, `jelly`, `zapdrone`) are listed in `FLOATING` in
 `src/builder.js` — the pure module, so the checker can tell "hovers by design" from
 "placed in mid-air by mistake". Add new hovering kinds there as well as to `ENEMY`.
+
+Their size and default patrol live in `BODY`, also in `src/builder.js`, and `ENEMY` in
+`world.js` spreads them in. The checker needs those numbers to **sweep the patrol path
+through the level**: an enemy's placed position can be perfectly legal while half its
+circuit is inside a rock. That check found twelve on its first run, across all five
+levels, including a flapjack that had been flying through a ledge since it was written.
+Placement is not the same question as path.
+
+## The camera never loses sight of Orion
+
+The rig is fixed per level, so occlusion is guaranteed rather than possible — the back of the
+lighthouse, a tunnel roof, and every full-corridor gate in the flight level. `keepOrionInSight()`
+in `main.js` hides any solid strictly between the camera and Orion.
+
+Do NOT "fix" this by shortening the boom. That was tried: the corridor walls are 56u wide and 4u
+thick, so pulling in until the line is clear puts the camera inside the wall, or a foot from Orion's
+back. Hiding the occluder keeps the full boom and never hides what he is flying toward, because
+what is ahead of him is not on the segment.
+
+Consequence worth knowing: a hidden mesh casts no shadow, so a big slab's shadow pops as it is cut
+away. That is cheaper than being blind.
 
 ## Level authoring
 
@@ -152,7 +186,40 @@ Music gotchas, learned the hard way:
 
 Always check a generated track before shipping it — `ffprobe` for duration (it lies short),
 then `ffmpeg -af volumedetect` and `-af silencedetect`. A 13-second or silent track looks
-exactly like a good one on disk.
+exactly like a good one on disk. Also match the level: a fresh render can master 4 dB hotter
+than the rest of the soundtrack, which is jarring when the level changes.
+
+### "No vocals" is not a request the model honours
+
+It is the single most expensive failure here — frost was re-rolled **three times** across two
+days and sang every time, because the fix being attempted was always "word the caption more
+firmly". Captions do not work. What does:
+
+1. **A real negative prompt.** The graph used to feed `ConditioningZeroOut` as the negative, so
+   CFG was steering away from *nothing*. `NEGATIVE` in `genmusic.js` now describes a song with a
+   lead singer, positively, which is how CFG reads a negative.
+2. **A higher `cfg`** so that negative actually bites (frost ships at 2.6, not 1.7).
+3. **Rolling several seeds and MEASURING.** The seed dominates everything else. On identical
+   settings, one seed scored +0.5 dB of vocals and another -48.7 dB.
+
+`SEED=1234 CFG=2.6 node tools/genmusic.js frost` overrides both for one run, for exactly this.
+Pin the winner back into `TRACKS` — a track you cannot reproduce is a track you cannot fix.
+
+### Checking for vocals IS automatable — with the right tool
+
+```sh
+python tools/vocalcheck.py            # every track; prints PASS/FAIL
+```
+
+It separates a vocals stem from an instrumental stem and reports the ratio. Every track that
+shipped scores -10 dB or lower; the take that sang scored **+2.3 dB**. That is not a close call,
+and it passes the control the earlier attempt failed.
+
+The earlier attempt failed because it asked an *audio LLM* "does this have vocals" — fed the
+known-singing coast take as a control, it said no. That experiment is written up in
+`AGENTS.local.md` and its conclusion, "get a person to listen", was too broad: source separation
+answers this question reliably. **A human is still the only judge of whether a track is any
+good** — that part stands.
 
 ### Loop points
 
@@ -208,8 +275,8 @@ openrouter MCP. Two gotchas, both learned the hard way:
 > The exact commands, container name and which box has ImageMagick are in
 > **`AGENTS.local.md`** (gitignored).
 
-**Judging a track by ear is a human job.** An audio model was tried for "does this have
-vocals" and failed its control — see `AGENTS.local.md`. Get a person to listen.
+**Judging whether a track is GOOD is a human job.** Whether it has a singer on it is not —
+`tools/vocalcheck.py` answers that, see above. Get a person to listen for the rest.
 
 The house style is set by the Steam Deck grid art for game 1: cosmic indigo, gold stars,
 Orion in a white helmet with an orange stripe, blue overalls with a white chest star,
