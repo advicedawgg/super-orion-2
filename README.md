@@ -139,8 +139,9 @@ stars**, 4 crate types, 5 enemy types, moving platforms, checkpoints, lives,
 spin/ground-pound/double-jump, **swimming and a jetpack**, generated textures and a full generated
 soundtrack with real loop points.
 
-Every level is playable from the map straight away, and your best star count per level is saved and
-shown on its placard. Running out of lives puts you back on the map rather than ending a run.
+Levels unlock in order — clear one to open the next — and everything you have cleared stays open, so
+you can go back for a better score. Your best star count per level is saved and shown on its placard.
+Running out of lives puts you back on the map rather than ending a run.
 
 | # | Level | Length | ⭐ | |
 |---|---|---|---|---|

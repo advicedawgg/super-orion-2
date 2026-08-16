@@ -84,6 +84,22 @@ class Builder {
     return s;
   }
 
+  /**
+   * An invisible wall: the collider of wall(), with no mesh and no standing on
+   * top. `scenery` is the flag tree trunks already use for exactly this, so
+   * src/world.js skips drawing it and tools/check.js skips treating it as a
+   * platform — both for free.
+   *
+   * Use it where the visible fence is waist-high on purpose. A rail you can
+   * see over is a rail a double jump clears (4.08u), and raising the real one
+   * to beat that walls the view in.
+   */
+  barrier(x, y, z, w, d, h) {
+    const s = this.box(x, y, z, w, d, h, 'rock');
+    s.scenery = true;
+    return s;
+  }
+
   /** Platform sliding between here and `to`. period = seconds per round trip. */
   mover(x, y, z, w, d, h, to, period = 4, tex = 'metal') {
     const s = this.box(x, y, z, w, d, h, tex);

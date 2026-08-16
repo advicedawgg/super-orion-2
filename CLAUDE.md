@@ -46,8 +46,10 @@ frame for the whole coyote window. None of those were visible in the diff.
   56u wide and pulling in parks the camera inside one. See AGENTS.md.
 
 - The game is **hub-shaped**: `HUB` in `src/levels.js` is a real Builder level with
-  `B.portal()` doorways, and levels return you to it. Don't reintroduce the linear
-  "next level" chain — the map is why the flight level finally gets played.
+  `B.portal()` doorways, and levels return you to it. Unlocking is linear (clear one,
+  open the next) and cleared levels stay open for backtracking.
+- **You cannot leave the hub.** The stone rail is decorative; `B.barrier()` at 9u is
+  what stops a double jump. Don't "fix" an escape by raising the visible rail.
 - **Crates fall** when unsupported. Support is a footprint overlap, never a centre
   point, or every pyramid collapses on load.
 

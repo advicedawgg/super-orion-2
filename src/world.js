@@ -227,7 +227,7 @@ export class World {
       new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide }));
     sign.position.y = 4.5; g.add(sign);
     this.group.add(g);
-    return { g, ring, eye, sign, level: p.level, signY: 4.5,
+    return { g, ring, eye, sign, level: p.level, signY: 4.5, locked: false,
              pos: new THREE.Vector3(p.x, p.y, p.z) };
   }
 
@@ -238,7 +238,8 @@ export class World {
    */
   labelPortals(info) {
     for (const p of this.portals) {
-      const { title, sub, accent } = info(p.level);
+      const { title, sub, accent, locked } = info(p.level);
+      p.locked = !!locked;
       p.sign.material.map?.dispose();
       p.sign.material.map = signTexture(title, sub, accent);
       p.sign.material.needsUpdate = true;
@@ -246,6 +247,10 @@ export class World {
       p.ring.material.color.set(accent);
       p.eye.material = p.eye.material.clone();
       p.eye.material.color.set(accent);
+      // A shut door should look shut from across the island, before you have
+      // walked over and read the sign: dark, still, and barely there.
+      p.eye.material.opacity = locked ? .12 : .45;
+      p.ring.material.emissive?.set(locked ? 0x000000 : 0x5a4300);
     }
   }
 
@@ -326,10 +331,14 @@ export class World {
     }
 
     for (const p of this.portals) {
-      p.ring.rotation.z += dt * .55;
-      p.sign.position.y = p.signY + Math.sin(this.time * 1.8 + p.level) * .13;
-      p.eye.scale.setScalar(1 + Math.sin(this.time * 2.4 + p.level) * .04);
-      if (near(player.pos, p.pos, 2.1, 3.4)) return { portal: p.level };
+      if (!p.locked) {                      // a locked door does not beckon
+        p.ring.rotation.z += dt * .55;
+        p.sign.position.y = p.signY + Math.sin(this.time * 1.8 + p.level) * .13;
+        p.eye.scale.setScalar(1 + Math.sin(this.time * 2.4 + p.level) * .04);
+      }
+      // Report the touch either way; main.js decides what a locked one means,
+      // because whether it is open is a save-file question, not a world one.
+      if (near(player.pos, p.pos, 2.1, 3.4)) return { portal: p.level, locked: p.locked };
     }
 
     if (this.goalMesh) {

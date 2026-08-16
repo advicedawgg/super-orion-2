@@ -1488,6 +1488,9 @@ export const byId = id => LEVELS.find(l => l.id === id);
  */
 export const HUB = {
   id: 'hub', name: 'Star Island', hub: true,
+  // Borrowed until the hub gets a theme of its own; `music` overrides the
+  // usual "track is named after the level" rule.
+  music: 'jungle',
   sky: [0x4aa8ff, 0xdff1ff], fog: [0xd6ecff, 60, 210],
   sun: 0xfff4dd, sunDir: [-0.4, 1, 0.55], amb: 0x4e6a48,
   camYaw: 0, camOff: [0, 7.0, 14], start: [0, 0, 8],
@@ -1514,8 +1517,27 @@ export const HUB = {
     for (const [x, z, s] of [[-16.5, 14, .9], [16.5, 14, .85], [-17, 6, .8], [17, 6, .75],
                              [-16, -20, .8], [16, -20, .85], [-8, 18, .7], [8, 18, .7]])
       B.tree(x, 0, z, s);
-    B.wall(-16, 2.2, -12, 4, 4, 2.2, 'rock');
-    B.wall(16, 2.2, -12, 4, 4, 2.2, 'rock');
+    B.wall(-16, 2.2, -16, 4, 4, 2.2, 'rock');
+    B.wall(16, 2.2, -16, 4, 4, 2.2, 'rock');
+
+    // A wall all the way round. You cannot fall off the map — there is nothing
+    // to be gained by dying on the level select, and a kid who walks off the
+    // edge while reading the signs has been punished for reading the signs.
+    // The front rail spends most of its life between the camera and Orion, and
+    // is simply not drawn while it does; that is what keepOrionInSight is for.
+    const R = 2.6;                                  // rail height — waist high
+    B.wall(0, R, -27.5, 37, 1.5, R, 'rock');        // back
+    B.wall(0, R, 21.5, 37, 1.5, R, 'rock');         // front
+    B.wall(-18.5, R, -3, 1.5, 47, R, 'rock');       // left
+    B.wall(18.5, R, -3, 1.5, 47, R, 'rock');        // right
+    // …and the part that actually holds you in. The rail is scenery: a double
+    // jump clears 4.08u, and off the 2.2u outcrops that is 6.3u, so the real
+    // barrier goes to 9 and is invisible rather than walling the sea out.
+    const H = 9;
+    B.barrier(0, H, -27.5, 37, 1.5, H);
+    B.barrier(0, H, 21.5, 37, 1.5, H);
+    B.barrier(-18.5, H, -3, 1.5, 47, H);
+    B.barrier(18.5, H, -3, 1.5, 47, H);
 
     // Distant palms on the water, never solid.
     for (let z = 20; z > -60; z -= 14) {

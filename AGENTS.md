@@ -107,13 +107,26 @@ away. That is cheaper than being blind.
 `HUB` in `src/levels.js` is the map you stand on between levels — authored with the same
 Builder, checked by the same gate (`def.hub` only turns off "must have a goal" and the
 jump-arc flood fill). `B.portal(x, y, z, level)` is a doorway; walking into it plays that
-level. There is no unlock gating on purpose: the last level used to be the least-tested
-thing in the game because reaching it meant playing four others first.
+level. It borrows jungle's music via `music: 'jungle'`, which overrides the usual
+"track is named after the level" rule; give it its own theme when there is one.
 
-Flow is now hub-shaped rather than linear. A level ends by returning you to the map, best
-stars per level are saved under `lv` in the save file, and running out of lives is not a
-game over any more — it drops you back on the map with your bests intact. `G.inHub` is what
-tells the HUD, the pause card and ↓ which world they are in.
+**Progression is linear.** `unlocked(i)` in `main.js` is `i === 0 || cleared(i - 1)`: the
+first level is always open, clearing one opens the next, and everything already cleared
+stays open so you can go back and beat your score. A locked ring is dark and still, its
+placard says LOCKED, and walking into it bonks and names the level you owe. That check is
+edge-triggered on `G.atPortal` — standing in a locked ring must complain once, not once a
+frame.
+
+A level ends by returning you to the map, best stars per level are saved under `lv` in the
+save file, and running out of lives is not a game over any more — it drops you back on the
+map with your bests intact. `G.inHub` is what tells the HUD, the pause card and ↓ which
+world they are in.
+
+**You cannot leave the island.** The visible stone rail is 2.6u and decorative; a double
+jump clears 4.08u, and off the 2.2u outcrops that is 6.3u. The thing that actually holds
+you in is `B.barrier()` at 9u — a collider with no mesh, using the same `scenery` flag tree
+trunks already use, so world.js skips drawing it and check.js skips treating it as a
+platform. Raising the *visible* rail that high would wall the sea out instead.
 
 ## Crates fall
 

@@ -49,6 +49,10 @@ const bestFor = id => G.lv[id] || 0;
 const totalStars = () => LEVELS.reduce((n, l) => n + bestFor(l.id), 0);
 const cleared = id => id in G.lv;
 const allCleared = () => LEVELS.every(l => cleared(l.id));
+// Progression is linear: the first is always open, and clearing one opens the
+// next. Everything you have already cleared stays open, so backtracking to
+// beat your score on an earlier level is always allowed.
+const unlocked = i => i === 0 || cleared(LEVELS[i - 1].id);
 function persist() {
   G.best = Math.max(G.best, totalStars());
   localStorage.setItem(SAVE_KEY, JSON.stringify({ best: G.best, lv: G.lv }));
@@ -213,7 +217,7 @@ function loadWorld(def) {
   G.runStars = 0;
   player.reset(G.spawn);
   snapCamera();
-  Sound.playMusic(def.id);
+  Sound.playMusic(def.music || def.id);
   if (def.hint) toast(def.hint, true);
   return def;
 }
@@ -223,12 +227,23 @@ function enterHub() {
   G.inHub = true;
   G.hearts = 3; G.lives = 5; G.runStars = 0;
   loadWorld(HUB);
-  world.labelPortals(i => ({
-    title: LEVELS[i].name,
-    sub: cleared(LEVELS[i].id) ? `⭐ ${bestFor(LEVELS[i].id)}` : 'NEW',
-    accent: LEVELS[i].sky[0],
-  }));
+  world.labelPortals(i => {
+    const open = unlocked(i);
+    return {
+      title: LEVELS[i].name,
+      sub: !open ? '🔒 LOCKED' : cleared(LEVELS[i].id) ? `⭐ ${bestFor(LEVELS[i].id)}` : 'NEW',
+      accent: open ? LEVELS[i].sky[0] : 0x55607a,
+      locked: !open,
+    };
+  });
+  G.atPortal = null;
   G.state = 'HUB'; hideOverlay(); drawHUD();
+  // Announce the door that just opened, once, on the way back in.
+  if (G.justUnlocked !== undefined) {
+    const n = G.justUnlocked; G.justUnlocked = undefined;
+    toast(`${LEVELS[n].name} unlocked!`);
+    Sound.sfx('life');
+  }
 }
 
 function enterLevel(i) {
@@ -254,8 +269,11 @@ function levelClear() {
   const prev = bestFor(id), beat = G.runStars > prev;
   // Only ever bank an improvement: replaying a level for fun must not cost you
   // the score you already have.
+  const first = !(id in G.lv);          // clearing it with 0 stars still counts
   G.lv[id] = Math.max(prev, G.runStars);
   persist();
+  // Clearing this for the first time is what opens the next one.
+  if (first && G.level + 1 < LEVELS.length) G.justUnlocked = G.level + 1;
   const perfect = G.runStars >= total;
   show(`<h1>LEVEL CLEAR<small>${LEVELS[G.level].name.toUpperCase()}</small></h1>
     <p class="lead">Stars this level: <b>${G.runStars} / ${total}</b>${perfect ? ' — ⭐ STAR CHAMPION!' : ''}<br>
@@ -411,7 +429,15 @@ function frame(now) {
       }
       player.update(dt, world.solids, HUB.camYaw || 0);
       const ev = world.update(dt, player);
-      if (ev && ev.portal !== undefined) { Sound.sfx('checkpoint'); enterLevel(ev.portal); break; }
+      const at = ev && ev.portal !== undefined ? ev.portal : null;
+      // Edge-triggered: standing in a locked ring must say so once, not once a
+      // frame, and stepping out and back in is what asks again.
+      if (at !== null && at !== G.atPortal) {
+        if (!ev.locked) { Sound.sfx('checkpoint'); G.atPortal = at; enterLevel(at); break; }
+        Sound.sfx('bonk');
+        toast(`Finish ${LEVELS[at - 1].name} first!`);
+      }
+      G.atPortal = at;
       if (player.pos.y < world.killY) { player.reset(new THREE.Vector3(...HUB.start)); snapCamera(); }
       break;
     }
