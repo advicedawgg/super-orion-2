@@ -15,6 +15,14 @@ export const CRATE_SIZE = 1.8;
 export const FLOATING = new Set(['flapjack', 'jelly', 'zapdrone']);
 
 /**
+ * The flora kinds src/world.js can draw. Only 'pine' has a trunk you can bump
+ * into; the underwater ones are soft scenery you swim straight through, which
+ * is why `tree()` refuses to make them solid. Here, in the pure module, so the
+ * checker can reject a typo'd kind instead of the game drawing nothing.
+ */
+export const FLORA = new Set(['pine', 'kelp', 'coral', 'fan', 'crystal']);
+
+/**
  * How big each enemy is and how far it moves when the level doesn't say.
  * Here, in the pure module, because tools/check.js needs the same numbers to
  * sweep a patrol path through the level and catch a bat that spends half its
@@ -139,8 +147,15 @@ class Builder {
    * A tree. Solid by default — walking through a trunk you're standing next to
    * looks broken. Pass solid=false for distant backdrop trees, which must NOT
    * be solid or a falling player lands on one instead of dying.
+   *
+   * `kind` picks the art (see FLORA and world.js `addTree`). Everything that
+   * isn't a 'pine' is soft-bodied scenery — kelp bends, coral is brittle — and
+   * `trunkSolid` models a tree trunk, so the checker fails a solid one.
    */
-  tree(x, y, z, s = 1, solid = true) { this.o.trees.push({ x, y, z, s, solid }); }
+  tree(x, y, z, s = 1, solid = true, kind = 'pine') { this.o.trees.push({ x, y, z, s, solid, kind }); }
+  /** Soft scenery — kelp, coral, a crystal cluster. Never solid, so this is
+   *  the honest spelling of it for everything that isn't a tree. */
+  weed(x, y, z, s = 1, kind = 'kelp') { this.tree(x, y, z, s, false, kind); }
 }
 
 /** Run a level definition's build() and return its plain data. */

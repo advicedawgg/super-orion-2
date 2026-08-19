@@ -93,6 +93,7 @@ export class World {
     this.stars = data.stars.map(s => this.addStar(s));
     this.enemies = data.enemies.map(e => this.addEnemy(e));
     this.checkpoints = data.checkpoints.map(c => this.addCheckpoint(c));
+    this.flora = [];                          // sway pivots; see addKelp
     for (const t of data.trees) this.addTree(t);
     this.portals = (data.portals || []).map(p => this.addPortal(p));
     if (this.goalPos) this.addGoal();
@@ -279,20 +280,59 @@ export class World {
     const z0 = Math.min(...zs), z1 = Math.max(...zs);
     const size = Math.max(g.size, (z1 - z0) + 200);
     // Tinted down: anything this far below the play space should read as
-    // "in shadow, a long way away", not as more of the same floor.
+    // "in shadow, a long way away", not as more of the same floor. Lava is the
+    // exception — it is the light source, not a lit surface, so it takes an
+    // unlit material at full brightness. Shaded like rock in a cave lit by one
+    // dim sun it came out mud brown, and mud does not read as "do not land".
+    const molten = g.tex === 'lava';
     const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size),
-      new THREE.MeshLambertMaterial({ map: t.clone(), color: 0x9fa8a2 }));
+      molten ? new THREE.MeshBasicMaterial({ map: t.clone() })
+             : new THREE.MeshLambertMaterial({ map: t.clone(), color: 0x9fa8a2 }));
     m.material.map.repeat.set(size / 4, size / 4);
     m.material.map.needsUpdate = true;
     m.rotation.x = -Math.PI / 2;
     m.position.set(0, g.y, (z0 + z1) / 2);
-    m.receiveShadow = true;
+    m.receiveShadow = !molten;             // nothing casts a shadow onto lava
     this.group.add(m);
     this.groundY = g.y;
   }
 
+  /* ---- flora ----
+   * `kind` picks the shape. A pine is a pine; underwater it is kelp or coral,
+   * because the reef used to be planted with conifers — the backdrop of the
+   * one level nobody walks to the edge of, which is exactly the kind of thing
+   * that survives five playtests.
+   *
+   * Everything here is deterministic in (x,z): the same plant is the same
+   * plant on every load, so a screenshot is reproducible and nothing pops.
+   */
   addTree(t) {
     const g = new THREE.Group(); g.position.set(t.x, t.y, t.z); g.scale.setScalar(t.s);
+    const seed = Math.abs(t.x * 7.3 + t.z * 3.1);
+    const rnd = k => ((Math.sin(seed * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1;
+
+    if (t.kind === 'kelp') this.addKelp(g, rnd);
+    else if (t.kind === 'coral') this.addCoral(g, rnd);
+    else if (t.kind === 'fan') this.addFan(g, rnd);
+    else if (t.kind === 'crystal') this.addCrystal(g, rnd);
+    else this.addPine(g);
+
+    g.rotation.y = seed % 6.28;                      // varied but deterministic
+    // A sea fan is a flat blade: spun to a random angle, half of them are
+    // edge-on and read as a pink stick. Face it at the CAMERA — which in this
+    // game is a fixed rig looking up +Z, so that is +Z, not "inward toward the
+    // corridor". Facing the corridor is what makes it edge-on from the camera.
+    if (t.kind === 'fan') g.rotation.y = (rnd(11) - .5) * .9;
+    this.group.add(g);
+  }
+
+  /** Reef colours die in the teal fog under a dim underwater sun, so everything
+   *  down here carries its own faint glow. Cheap: no light, just emissive. */
+  reefMat(color, extra = {}) {
+    return new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: .28, ...extra });
+  }
+
+  addPine(g) {
     const trunk = new THREE.Mesh(tiledBox(.6, 3.4, .6, 2), surface('wood'));
     trunk.position.y = 1.7; g.add(trunk);
     for (let i = 0; i < 3; i++) {
@@ -301,14 +341,142 @@ export class World {
       leaf.position.y = 3.1 + i * 1.05; g.add(leaf);
     }
     g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    g.rotation.y = (t.x * 7.3 + t.z * 3.1) % 6.28;   // varied but deterministic
-    this.group.add(g);
+  }
+
+  /**
+   * A kelp stalk: blades stacked in NESTED groups, so one sway angle per joint
+   * compounds up the plant and the tip travels furthest — a whole frond from
+   * one sine per segment, instead of animating a skeleton. `this.flora` is what
+   * update() ticks; a plant that never sways is not in it.
+   *
+   * No cast shadow. Sixty stalks of soft blades throwing 2048px shadow maps
+   * across the sand costs more than it reads underwater, where the light is
+   * scattered and nothing has a hard shadow anyway.
+   */
+  addKelp(g, rnd) {
+    const n = 4 + Math.floor(rnd(1) * 3);            // 4..6 joints
+    const tint = [0x2c6e3f, 0x357f46, 0x46934a, 0x2f6d55][Math.floor(rnd(2) * 4)];
+    let node = g;
+    for (let i = 0; i < n; i++) {
+      const joint = new THREE.Group();
+      joint.position.y = i === 0 ? 0 : 1.55;
+      // Every joint is a sway pivot. Lower ones barely move; the tip whips.
+      this.flora.push({ node: joint, amp: .07 + i * .045, phase: rnd(i + 3) * 6.28, speed: .8 + rnd(i + 9) * .5 });
+      const mat = this.reefMat(tint);
+      const blade = new THREE.Mesh(tiledBox(.5, 1.6, .22, 2), mat);
+      blade.position.y = .8;
+      blade.receiveShadow = true;
+      joint.add(blade);
+      // Two leaves per joint, one off each side, flattened into fronds. One
+      // small cone per joint left a bare stick with a thorn on it at any
+      // distance — which is what the first pass looked like from the corridor.
+      for (const sgn of [-1, 1]) {
+        const leaf = new THREE.Mesh(new THREE.ConeGeometry(.62, 2.1, 4), mat);
+        leaf.position.set(sgn * .62, 1.0 + (sgn > 0 ? .35 : 0), (i % 2 ? .18 : -.18));
+        leaf.rotation.z = -sgn * 1.15;
+        leaf.scale.set(1, 1, .3);                    // a frond, not a spike
+        leaf.receiveShadow = true;
+        joint.add(leaf);
+      }
+      node.add(joint); node = joint;
+    }
+  }
+
+  /** Staghorn coral: a stubby stalk and three or four blunt arms. Rigid — it
+   *  is limestone — so it is deliberately NOT in `this.flora`. */
+  addCoral(g, rnd) {
+    const tint = [0xff7d6b, 0xff9d4f, 0xe0567f, 0xb96bff][Math.floor(rnd(1) * 4)];
+    const mat = this.reefMat(tint);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(.55, .8, 1.5, 6), mat);
+    base.position.y = .75; g.add(base);
+    const arms = 3 + Math.floor(rnd(2) * 2);
+    for (let i = 0; i < arms; i++) {
+      const a = (i / arms) * 6.28 + rnd(i + 4) * .6;
+      const len = 1.6 + rnd(i + 7) * 1.4;
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(.2, .42, len, 5), mat);
+      arm.position.set(Math.cos(a) * .55, 1.4 + len * .38, Math.sin(a) * .55);
+      arm.rotation.z = -Math.cos(a) * .5; arm.rotation.x = Math.sin(a) * .5;
+      g.add(arm);
+      const tip = new THREE.Mesh(new THREE.SphereGeometry(.3, 6, 5), mat);
+      tip.position.set(Math.cos(a) * (.55 + len * .28), 1.4 + len * .78, Math.sin(a) * (.55 + len * .28));
+      g.add(tip);
+    }
+    // Receives, never casts. Underwater light is scattered — nothing down here
+    // has a hard shadow — and a 6-sided coral cast a black hexagon on the sand
+    // that read as a hole in the sea floor.
+    g.traverse(o => { if (o.isMesh) o.receiveShadow = true; });
+  }
+
+  /** A sea fan: a lobed blade on a short stem, ribbed on both faces. Wider
+   *  than it is tall and low on its stem — a tall half-disc on a stalk is a
+   *  mushroom, which is what the first two passes at this looked like. */
+  addFan(g, rnd) {
+    const tint = [0xff6f9a, 0xffb03a, 0x7fe3d0][Math.floor(rnd(1) * 3)];
+    const mat = this.reefMat(tint, { side: THREE.DoubleSide });
+    const rib = this.reefMat(tint, { side: THREE.DoubleSide, emissiveIntensity: .5 });
+    const pivot = new THREE.Group(); g.add(pivot);
+    this.flora.push({ node: pivot, amp: .12, phase: rnd(2) * 6.28, speed: .7 + rnd(3) * .4 });
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(.14, .24, .8, 5), mat);
+    stem.position.y = .4; pivot.add(stem);
+    // Two blades 20° apart: one flat circle is invisible edge-on, and crossing
+    // them any wider turns the fan into a dome.
+    for (const a of [-.18, .18]) {
+      // 5 segments, not 7: the straight chords read as lobes.
+      const blade = new THREE.Mesh(new THREE.CircleGeometry(1.5, 5, 0, Math.PI), mat);
+      blade.position.y = .72; blade.rotation.y = a;
+      blade.scale.set(1.15, .8, 1);                  // wider than tall
+      pivot.add(blade);
+    }
+    // Ribs on the FRONT of the blade, a shade brighter. Behind it they were
+    // simply invisible, and a blank lobe is a leaf, not coral.
+    for (let i = 0; i < 5; i++) {
+      const r = new THREE.Mesh(tiledBox(.09, 1.25, .09, 2), rib);
+      const a = -1.0 + i * .5;
+      r.position.set(Math.sin(a) * .72, .72 + Math.cos(a) * .5, .14);
+      r.rotation.z = -a;
+      pivot.add(r);
+    }
+    pivot.traverse(o => { if (o.isMesh) o.receiveShadow = true; });
+  }
+
+  /**
+   * A crystal cluster: a few tapered spires out of one base, glowing. The
+   * cavern's only light source that isn't the sun, and the reason a dark level
+   * is still readable — put them where you want the eye to go.
+   *
+   * Emissive rather than a real light: sixty PointLights would cost more than
+   * the rest of the level put together, and this reads the same at N64 scale.
+   */
+  addCrystal(g, rnd) {
+    const tint = [0x8f6bff, 0x4ec5f1, 0xff6fd0, 0x6fffc8][Math.floor(rnd(1) * 4)];
+    const mat = new THREE.MeshLambertMaterial({
+      color: tint, emissive: tint, emissiveIntensity: .95,
+      transparent: true, opacity: .9,
+    });
+    const n = 3 + Math.floor(rnd(2) * 3);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 6.28 + rnd(i + 5) * .8;
+      const h = 1.4 + rnd(i + 11) * 2.4;
+      // 4 sides, no cap taper: a chunky faceted spike, not a cone.
+      const sp = new THREE.Mesh(new THREE.ConeGeometry(.34 + rnd(i + 17) * .22, h, 4), mat);
+      const lean = .12 + rnd(i + 23) * .3;
+      sp.position.set(Math.cos(a) * .55, h * .45, Math.sin(a) * .55);
+      sp.rotation.set(Math.sin(a) * lean, a, -Math.cos(a) * lean);
+      g.add(sp);
+    }
+    // A dark base so the spires grow out of the rock rather than off it.
+    const base = new THREE.Mesh(new THREE.SphereGeometry(.85, 7, 4),
+      new THREE.MeshLambertMaterial({ color: 0x2a2340 }));
+    base.scale.y = .45; g.add(base);
+    g.traverse(o => { if (o.isMesh) o.receiveShadow = true; });
   }
 
   /* ---- runtime ---- */
   update(dt, player) {
     this.time += dt;
     this.moveMovers(dt, player);
+    // The current. One sine per joint, and nesting does the rest.
+    for (const f of this.flora) f.node.rotation.z = Math.sin(this.time * f.speed + f.phase) * f.amp;
 
     for (const s of this.stars) {
       if (!s.alive) continue;

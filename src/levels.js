@@ -901,6 +901,235 @@ export const LEVELS = [
 },
 
 {
+  id: 'cavern', name: 'Crystal Cavern', world: 2,
+  // No cavern track has been generated yet, so it borrows the flight level's —
+  // the only one in the set that already sounds like a big dark space. Drop
+  // this line once `node tools/genmusic.js cavern` has produced cavern.mp3.
+  music: 'cosmic',
+  sky: [0x0a0716, 0x2b1a45], fog: [0x140c26, 22, 115],
+  sun: 0xc2a8ff, sunDir: [-0.32, 1, 0.42], amb: 0x241a3c, sunPower: 1.45,
+  camYaw: 0, camOff: [0, 5.6, 12.5], start: [0, 0, 14],
+  hint: 'Down the mine! Stay on the rock — that glow underneath is lava.',
+  build(B) {
+    // A running level, on purpose: it sits between the ice and the reef so the
+    // two free-movement levels don't land back to back. Everything here is
+    // jump, spin and stomp — no new verb to learn on top of a new place.
+    //
+    // Lava 14u down, so a miss is a death rather than a shortcut. The whole
+    // level lives between y -2 and y +16: it climbs the shaft it fell into.
+    B.ground(-14, 'lava');
+
+    /* --- A: the adit. Wide, lit, nothing to fall off ---------------------- */
+    B.floor(0, 0, 4, 12, 24, 'rock');                        // z 16 .. -8
+    B.wall(-8.5, 5.0, 4, 4, 24, 5, 'rock');                  // the mine walls,
+    B.wall(8.5, 5.0, 4, 4, 24, 5, 'rock');                   // standable ledges
+    B.weed(-5.4, 0, 9, 1.15, 'crystal');
+    B.weed(5.4, 0, 1, 1.35, 'crystal');
+    B.starLine(0, 1.4, 10, 4, [0, 0, -2.2]);
+    B.crate(-3.6, 0, -1, 'plain');
+    B.crate(3.6, 0, -1, 'plain');
+
+    /* --- B: the first drop, and the first thing that walks ---------------- */
+    B.floor(0, -1.6, -20, 12, 16, 'rock');                   // z -12 .. -28
+    B.enemy('grumblin', 0, -1.6, -20, { axis: 'x', range: 8 });
+    B.starLine(-3, -0.2, -16, 3, [3, 0, 0]);
+    B.weed(-5.2, -1.6, -25, 1.0, 'crystal');
+    B.crate(4, -1.6, -25, 'plain');
+
+    /* --- C: three pillars over the lava. The first real jumps ------------- */
+    B.box(-3, -0.8, -34.5, 5, 5, 8, 'rock');                 // z -32 .. -37
+    B.box(3, 0.0, -43.5, 5, 5, 9, 'rock');                   // z -41 .. -46
+    B.box(-3, 0.8, -52.5, 5, 5, 10, 'rock');                 // z -50 .. -55
+    B.star(-3, 0.6, -34.5);
+    B.star(3, 1.4, -43.5);
+    B.star(-3, 2.2, -52.5);
+    B.starLine(0, 2.6, -39, 3, [0, 0, -0.8], 1.4);           // over the first gap
+
+    /* --- D: the lantern gallery. Checkpoint 1 ----------------------------- */
+    B.floor(0, 0.8, -66, 14, 14, 'rock');                    // z -59 .. -73
+    B.checkpoint(0, 0.8, -66);
+    B.weed(-6, 0.8, -62, 1.5, 'crystal');
+    B.weed(6, 0.8, -70, 1.3, 'crystal');
+    B.crate(-4.2, 0.8, -66, 'star');
+    B.crate(4.2, 0.8, -66, 'plain');
+    B.enemy('prickle', 0, 0.8, -70, {});
+    B.starLine(-4, 2.2, -61, 5, [2, 0, 0]);
+
+    /* --- E: the lava lake. Two carts across it ---------------------------- */
+    // Metal, not rock: what you ride has to look different from what you stand
+    // on, and this is the mine — they read as ore carts on a rail.
+    B.mover(-5, 0.8, -78, 6, 6, 2, [5, 0.8, -78], 5);        // z -75 .. -81
+    B.mover(5, 0.8, -88, 6, 6, 2, [-5, 0.8, -88], 6);        // z -85 .. -91
+    B.star(-5, 2.2, -78);
+    B.star(5, 2.2, -88);
+    B.starLine(0, 3.2, -83, 3, [0, 0, -1.2], 1.2);
+    B.floor(0, 0.8, -100, 12, 12, 'rock');                   // z -94 .. -106
+    B.enemy('grumblin', 0, 0.8, -100, { axis: 'x', range: 7 });
+    B.crate(0, 0.8, -103, 'life');
+
+    /* --- F: two narrow ledges, one spiky sitter each ---------------------- */
+    B.floor(-4, 1.6, -116, 6, 12, 'rock');                   // z -110 .. -122
+    B.enemy('prickle', -4, 1.6, -114, {});
+    B.starLine(-4, 3.0, -118, 3, [0, 0, -1.6]);
+    B.floor(4, 2.4, -132, 6, 12, 'rock');                    // z -126 .. -138
+    B.enemy('prickle', 4, 2.4, -130, {});
+    B.starLine(4, 3.8, -134, 3, [0, 0, -1.6]);
+
+    /* --- G: the pumping hall. Checkpoint 2, and something that flies ------ */
+    B.floor(0, 2.4, -150, 14, 16, 'rock');                   // z -142 .. -158
+    B.checkpoint(0, 2.4, -150);
+    B.enemy('zapdrone', 0, 6.4, -150, { axis: 'x', range: 11 });
+    B.weed(-6.2, 2.4, -145, 1.4, 'crystal');
+    B.weed(6.2, 2.4, -155, 1.2, 'crystal');
+    B.crateRow(-2.1, 2.4, -154, 3, 'plain');
+    B.starLine(-4, 3.8, -146, 5, [2, 0, 0]);
+
+    /* --- H: the crystal staircase. Four steps, alternating sides ---------- */
+    B.box(-4, 4.6, -165, 6, 6, 12, 'rock');                  // z -162 .. -168
+    B.box(4, 6.8, -175, 6, 6, 14, 'rock');                   // z -172 .. -178
+    B.box(-4, 9.0, -185, 6, 6, 16, 'rock');                  // z -182 .. -188
+    B.box(4, 11.2, -195, 6, 6, 18, 'rock');                  // z -192 .. -198
+    B.star(-4, 6.0, -165);
+    B.star(4, 8.2, -175);
+    B.star(-4, 10.4, -185);
+    B.star(4, 12.6, -195);
+    B.weed(-4, 4.6, -167, .8, 'crystal');
+    B.weed(4, 11.2, -197, .9, 'crystal');
+
+    /* --- I: the high gallery. Room to breathe, two bats ------------------- */
+    B.floor(0, 11.2, -211, 14, 18, 'rock');                  // z -202 .. -220
+    B.enemy('flapjack', -4, 14.6, -207, { axis: 'x', range: 7, bob: 1.4 });
+    B.enemy('flapjack', 4, 14.6, -216, { axis: 'x', range: 7, bob: 1.4 });
+    B.crate(0, 11.2, -206, 'star');
+    B.starLine(-5, 12.6, -213, 6, [2, 0, 0]);
+    B.weed(-6.4, 11.2, -218, 1.6, 'crystal');
+    B.weed(6.4, 11.2, -204, 1.4, 'crystal');
+
+    /* --- J: the fork. The safe road, or the ore shelf that pays 5 --------- */
+    B.floor(-5, 11.2, -231, 8, 14, 'rock');                  // z -224 .. -238
+    B.enemy('grumblin', -5, 11.2, -231, { axis: 'z', range: 8 });
+    B.starLine(-5, 12.6, -227, 3, [0, 0, -2.2]);
+    B.box(7, 12.8, -231, 4, 4, 16, 'rock');                  // the shelf, 4u right
+    B.crate(7, 12.8, -231, 'star');
+    B.floor(0, 11.2, -249, 12, 14, 'rock');                  // z -242 .. -256
+    B.crate(0, 11.2, -246, 'plain');
+
+    /* --- K: down onto the shelf. Checkpoint 3 ----------------------------- */
+    B.floor(0, 8.0, -267, 12, 14, 'rock');                   // z -260 .. -274
+    B.checkpoint(0, 8.0, -267);
+    B.enemy('grumblin', 0, 8.0, -267, { axis: 'x', range: 8 });
+    B.weed(-5.6, 8.0, -263, 1.3, 'crystal');
+    B.starLine(-4, 9.4, -271, 5, [2, 0, 0]);
+
+    /* --- L: the stepping stones. Four pads, nothing under them ------------ */
+    B.box(-3, 8.0, -280, 4, 4, 20, 'rock');                  // z -278 .. -282
+    B.box(3, 8.0, -288, 4, 4, 20, 'rock');                   // z -286 .. -290
+    B.box(-3, 8.0, -296, 4, 4, 20, 'rock');                  // z -294 .. -298
+    B.box(3, 8.0, -304, 4, 4, 20, 'rock');                   // z -302 .. -306
+    B.star(-3, 9.4, -280);
+    B.star(3, 9.4, -288);
+    B.star(-3, 9.4, -296);
+    B.star(3, 9.4, -304);
+
+    /* --- M: the spring shaft. Bounce back up to the rail level ------------ */
+    B.floor(0, 8.0, -316, 12, 12, 'rock');                   // z -310 .. -322
+    B.crate(0, 8.0, -318, 'spring');
+    B.starLine(0, 11.0, -318, 4, [0, 1.1, 0]);               // straight up the shaft
+    B.floor(-4, 12.0, -331, 8, 10, 'rock');                  // z -326 .. -336
+    B.crate(-4, 12.0, -329, 'plain');
+
+    /* --- N: the ore rails. Metal decking, and a drone patrolling it ------- */
+    B.floor(4, 13.2, -345, 10, 10, 'metal');                 // z -340 .. -350
+    B.enemy('zapdrone', 4, 16.6, -345, { axis: 'x', range: 9 });
+    B.starLine(4, 14.6, -342, 4, [0, 0, -2.0]);
+    B.floor(-4, 14.0, -359, 10, 10, 'metal');                // z -354 .. -364
+    B.crate(-4, 14.0, -357, 'plain');
+    B.starLine(-4, 15.4, -361, 3, [0, 0, -1.6]);
+
+    /* --- O: the drone hall ------------------------------------------------ */
+    B.floor(0, 14.0, -376, 14, 16, 'rock');                  // z -368 .. -384
+    B.enemy('zapdrone', 0, 17.4, -376, { axis: 'x', range: 11 });
+    B.enemy('grumblin', 0, 14.0, -380, { axis: 'x', range: 8 });
+    B.crateRow(-2.1, 14.0, -372, 3, 'plain');
+    B.weed(-6.4, 14.0, -370, 1.5, 'crystal');
+    B.weed(6.4, 14.0, -382, 1.7, 'crystal');
+    B.starLine(-4, 15.4, -378, 5, [2, 0, 0]);
+
+    /* --- P: back down, two long ledges ------------------------------------ */
+    B.floor(5, 11.6, -393, 8, 10, 'rock');                   // z -388 .. -398
+    B.enemy('prickle', 5, 11.6, -391, {});
+    B.starLine(5, 13.0, -395, 3, [0, 0, -1.6]);
+    B.floor(-5, 9.2, -407, 8, 10, 'rock');                   // z -402 .. -412
+    B.crate(-5, 9.2, -405, 'plain');
+    B.starLine(-5, 10.6, -409, 3, [0, 0, -1.6]);
+
+    /* --- Q: the geode. The prettiest room in the game. Checkpoint 4 ------- */
+    B.floor(0, 9.2, -423, 14, 14, 'rock');                   // z -416 .. -430
+    B.checkpoint(0, 9.2, -423);
+    B.weed(-6.2, 9.2, -419, 1.8, 'crystal');
+    B.weed(6.2, 9.2, -419, 1.6, 'crystal');
+    B.weed(-6.2, 9.2, -427, 1.5, 'crystal');
+    B.weed(6.2, 9.2, -427, 1.9, 'crystal');
+    B.crate(-4.2, 9.2, -423, 'star');
+    B.crate(4.2, 9.2, -423, 'life');
+    B.starLine(-4, 10.6, -420, 5, [2, 0, 0]);
+    B.enemy('flapjack', 0, 12.6, -426, { axis: 'x', range: 8, bob: 1.6 });
+
+    /* --- R: the last climb ------------------------------------------------ */
+    B.box(-4, 11.4, -438, 6, 8, 22, 'rock');                 // z -434 .. -442
+    B.box(4, 13.6, -450, 6, 8, 24, 'rock');                  // z -446 .. -454
+    B.box(-4, 15.8, -462, 6, 8, 26, 'rock');                 // z -458 .. -466
+    B.star(-4, 12.8, -438);
+    B.star(4, 15.0, -450);
+    B.star(-4, 17.2, -462);
+
+    /* --- S: the summit gallery -------------------------------------------- */
+    B.floor(0, 15.8, -478, 14, 16, 'rock');                  // z -470 .. -486
+    B.enemy('grumblin', 0, 15.8, -478, { axis: 'x', range: 9 });
+    B.crate(-4.2, 15.8, -474, 'plain');
+    B.crate(4.2, 15.8, -474, 'plain');
+    B.weed(-6.4, 15.8, -483, 1.4, 'crystal');
+    B.starLine(-4, 17.2, -481, 5, [2, 0, 0]);
+
+    /* --- T: two more carts, over the deepest part of the shaft ------------ */
+    B.mover(-6, 15.8, -492, 6, 6, 2, [6, 15.8, -492], 5);    // z -489 .. -495
+    B.mover(6, 15.8, -502, 6, 6, 2, [-6, 15.8, -502], 6);    // z -499 .. -505
+    B.star(-6, 17.2, -492);
+    B.star(6, 17.2, -502);
+    B.starLine(0, 18.2, -497, 3, [0, 0, -1.2], 1.2);
+
+    /* --- U: two small landings, dropping toward the chamber --------------- */
+    B.box(0, 14.6, -512, 8, 8, 26, 'rock');                  // z -508 .. -516
+    B.box(0, 13.4, -524, 8, 8, 26, 'rock');                  // z -520 .. -528
+    B.starLine(0, 16.0, -512, 3, [0, 0, -1.4]);
+    B.crate(0, 13.4, -524, 'plain');
+
+    /* --- V: the last chamber. Checkpoint 5 -------------------------------- */
+    B.floor(0, 13.4, -539, 14, 14, 'rock');                  // z -532 .. -546
+    B.checkpoint(0, 13.4, -539);
+    B.enemy('zapdrone', 0, 16.8, -539, { axis: 'x', range: 11 });
+    B.enemy('prickle', -4, 13.4, -543, {});
+    B.crate(4.2, 13.4, -535, 'star');
+    B.weed(6.4, 13.4, -543, 1.6, 'crystal');
+    B.starLine(-4, 14.8, -537, 5, [2, 0, 0]);
+
+    /* --- W: two pads up to daylight --------------------------------------- */
+    B.box(-4, 14.6, -552.5, 5, 5, 28, 'rock');               // z -550 .. -555
+    B.box(4, 15.8, -561.5, 5, 5, 30, 'rock');                // z -559 .. -564
+    B.star(-4, 16.0, -552.5);
+    B.star(4, 17.2, -561.5);
+
+    /* --- X: the way out --------------------------------------------------- */
+    B.floor(0, 15.8, -577, 16, 18, 'rock');                  // z -568 .. -586
+    B.weed(-7, 15.8, -572, 2.0, 'crystal');
+    B.weed(7, 15.8, -572, 2.0, 'crystal');
+    B.crate(-4.2, 15.8, -573, 'star');
+    B.crate(4.2, 15.8, -573, 'plain');
+    B.starLine(-4, 17.2, -578, 5, [2, 0, 0]);
+    B.goal(0, 15.8, -582);
+  },
+},
+{
   id: 'reef', name: 'Sunken Reef', world: 2, mode: 'swim', ceilY: 26,
   sky: [0x03323d, 0x0b7d8a], fog: [0x0a5b6a, 12, 92],
   sun: 0x7fc9c6, sunDir: [-0.35, 1, 0.4], amb: 0x0c2f38,
@@ -913,14 +1142,28 @@ export const LEVELS = [
     // go up inside — and ceilY 26 is the water surface that keeps it a level.
     B.ground(-12, 'sand');                                   // the deep sand, 12u down
 
-    // Kelp beds out on the sand either side. Never solid, always at the world
-    // floor, rows 20u apart so a 600u level isn't 300 meshes of seaweed.
+    // Kelp beds and coral heads out on the sand either side. Never solid,
+    // always at the world floor, rows 20u apart so a 600u level isn't 300
+    // meshes of seaweed. The kinds cycle on a prime-length list against a
+    // 2-per-row loop, so neither side ever grows the same thing twice running
+    // — and NOT pines, which is what stood here until 2026-08-19.
+    const BED = ['kelp', 'coral', 'kelp', 'fan', 'kelp'];
+    let bi = 0;
     for (let z = 6; z > -616; z -= 20) {
       for (const x of [-27, 29]) {
-        const s = 1.3 + ((Math.abs(x) * 3 + Math.abs(z) * 5) % 9) / 7;   // 1.3 .. 2.5
-        B.tree(x + ((z * 3) % 7) - 3, -12, z + (x % 5), s, false);
+        const kind = BED[bi++ % BED.length];
+        // Kelp is the tall one; a coral head at kelp scale is a boulder.
+        const s = (1.3 + ((Math.abs(x) * 3 + Math.abs(z) * 5) % 9) / 7) * (kind === 'kelp' ? .8 : .62);
+        B.weed(x + ((z * 3) % 7) - 3, -12, z + (x % 5), s, kind);
       }
     }
+    // A few heads on the sandbank itself, where you can actually swim past
+    // them. Off to the corners: scenery you swim through still shouldn't sit
+    // on the line the level wants you to take.
+    B.weed(-6.6, 0, 9, 1.0, 'coral');
+    B.weed(6.6, 0, 6, 1.2, 'fan');
+    B.weed(-6.9, 0, -7, 1.1, 'kelp');
+    B.weed(6.9, 0, -9, .9, 'coral');
 
     /* --- A: the sandbank. Learn the stroke ------------------------------- */
     B.floor(0, 0, 2, 16, 24, 'sand');                        // z 14 .. -10
@@ -1502,13 +1745,16 @@ export const HUB = {
     // face across the bottom half of the screen.
     B.floor(0, 0, -3, 36, 48, 'grass');             // x -18..18, z -27 .. 21
 
-    // The five doorways, in an arc so none of them hides behind another and
-    // the camera — which is fixed — sees the whole set from the spawn.
-    B.portal(-14, 0, -4, 0);
-    B.portal(-7.5, 0, -11, 1);
-    B.portal(0, 0, -13.5, 2);
-    B.portal(7.5, 0, -11, 3);
-    B.portal(14, 0, -4, 4);
+    // The six doorways, in an arc so none of them hides behind another and
+    // the camera — which is fixed — sees the whole set from the spawn. An even
+    // number has no middle, so the arc opens out around the centre line rather
+    // than putting a door on it.
+    B.portal(-16, 0, -3, 0);
+    B.portal(-10.5, 0, -9.5, 1);
+    B.portal(-3.6, 0, -13.5, 2);
+    B.portal(3.6, 0, -13.5, 3);
+    B.portal(10.5, 0, -9.5, 4);
+    B.portal(16, 0, -3, 5);
 
     // Something to look at, and a reason the island reads as a place. All of
     // it is clear of the walking line between the spawn and the arc.

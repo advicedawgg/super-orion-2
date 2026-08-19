@@ -24,7 +24,8 @@ repo is the deployable artifact. Deploy with `npx wrangler deploy`.
 | SPACE (jetpack) | **Hold to fly**, let go to drop. 4s of fuel, refilled by landing. No jump at all |
 | X | **Spin attack** — kills most things without landing on them |
 | C (in the air) | **Ground pound** — straight down, smashes crates |
-| P / ESC | Pause · R restart · M music · F fullscreen |
+| P / ESC | Pause · R restart · M mute · F fullscreen |
+| O | **Sound menu** — music and effects sliders, from the title or the pause card |
 
 Gamepad and touch are wired up too (Steam Deck, phone, tablet).
 
@@ -54,7 +55,7 @@ N64 character, but crisp filtering, soft shadows and real fog.
 | `src/world.js` | Builder data → meshes; stars, crates, enemies, movers, goal. |
 | `src/player.js` | Orion's model (~30 boxes, one atlas) + movement state machine. |
 | `src/art.js` | Procedural textures, with a slot for generated PNGs (see below). |
-| `src/audio.js` | Synthesised SFX; music loads from `assets/audio/` if present. |
+| `src/audio.js` | Synthesised SFX; music loads from `assets/audio/` if present. Master bus with a music and an SFX sub-bus behind the sound menu. |
 | `src/main.js` | Renderer, camera rig, game loop, HUD. |
 | `tools/check.js` | **The gate.** See below. |
 | `tools/vocalcheck.py` | Is anyone *singing* on a generated track? Measures it instead of guessing. |
@@ -134,7 +135,7 @@ and has to be downloaded.
 **Live at [orion2.advicedawg.com](https://orion2.advicedawg.com)**, and fronted by the launcher menu at
 [orion.advicedawg.com](https://orion.advicedawg.com).
 
-Playable end to end: a **hub island** you pick levels from, **5 levels across 2 worlds, 844 collectable
+Playable end to end: a **hub island** you pick levels from, **6 levels across 2 worlds, 1,003 collectable
 stars**, 4 crate types, 5 enemy types, moving platforms, checkpoints, lives,
 spin/ground-pound/double-jump, **swimming and a jetpack**, generated textures and a full generated
 soundtrack with real loop points.
@@ -148,10 +149,15 @@ Running out of lives puts you back on the map rather than ending a run.
 | 1 | Jungle Jog | 662u | 178 | |
 | 2 | Crumble Coast | 604u | 150 | |
 | 3 | Frostfizz Peaks | 623u | 180 | |
-| 4 | Sunken Reef | 616u | 155 | **swim** |
-| 5 | Cosmic Cannonball | 649u | 181 | **jetpack** |
+| 4 | Crystal Cavern | 581u | 159 | |
+| 5 | Sunken Reef | 616u | 155 | **swim** |
+| 6 | Cosmic Cannonball | 649u | 181 | **jetpack** |
 
-That is 3,154 units of level, up from 358.
+That is 3,735 units of level, up from 358.
+
+Crystal Cavern (2026-08-19) went in at 4 rather than on the end: the reef and the flight level are both
+free-movement levels, so back to back they left the game with no plain running level in World 2. It also
+borrows `cosmic.mp3` — it is the only level without a track of its own.
 
 ## Next
 
@@ -169,5 +175,8 @@ What is worth doing next, in rough priority order:
    reasoned rather than heard — an audio model was tried and failed its control (`AGENTS.local.md`).
    `frost.mp3` was re-rolled on 2026-08-16 (seed 4410, cfg 2.6) after three takes that sang; it now
    measures cleaner than any other track in the game, but nobody has heard the new one yet.
+4. **Generate `cavern.mp3`.** The new level borrows the flight level's track. `node tools/genmusic.js
+   cavern` once ComfyUI is up, then `tools/looppoints.js`, then drop the `music: 'cosmic'` line from the
+   level def.
 5. Backdrop trees are the mesh budget: Jungle Jog draws ~1470 meshes against ~800 for the others.
    Fine on a desktop GPU, and it is the first thing to instance if the Steam Deck struggles.

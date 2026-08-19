@@ -172,6 +172,31 @@ Levels are `build(B)` functions in `src/levels.js` run against the Builder.
   ice pads were doing before they were an ice rink in a space station.
 - Trees are **solid by default** (you can't walk through a trunk you're standing beside).
   Backdrop trees must pass `solid = false`, or a falling player lands on one instead of dying.
+- **Flora has kinds.** `B.tree(x,y,z,s,solid,kind)` where kind ∈ `FLORA` (`src/builder.js`):
+  `pine`, `kelp`, `coral`, `fan`, `crystal`. Only a pine has a trunk you can bump into —
+  `trunkSolid` models a tree — so the checker fails any other kind marked solid, and
+  `B.weed(x,y,z,s,kind)` is the shorthand that can't get that wrong. Use the right one for
+  the place: the reef was planted with conifers for five playtests because `B.tree` was the
+  only call there was, and nobody walks to the edge of the one level it showed in.
+  `world.js` draws each kind (`addKelp` / `addCoral` / `addFan` / `addCrystal`); the sway is
+  nested groups plus one sine per joint, and anything pushed to `this.flora` gets ticked.
+- **Lava ground draws unlit.** `ground(y, 'lava')` gets a MeshBasicMaterial at full
+  brightness — it is the light source, not a lit surface. Shaded like rock in a cave lit by
+  one dim sun it came out mud brown, and mud does not read as "do not land here".
+
+## Sound
+
+`src/audio.js` runs a master bus (`bus`, which is also the mute switch) with a **music** and an
+**SFX** sub-bus under it. `MIX` is the ceiling each slider scales; the defaults reproduce the mix
+the game shipped with, so an existing player hears no change until they move something. Positions
+live in their own localStorage key (`superOrion2Sound`) — not the game save, because clearing
+your stars must not reset the volume.
+
+The menu is the `OPTIONS` state in `src/main.js`: **O** from the title or the pause card, arrows
+or the d-pad to set, drag the bar on a touchscreen, O again to go back. It brings the audio
+context up and puts a track on, because a volume slider you cannot hear is a slider you cannot
+set. Note `tone()`/`noise()` take a `vol` ARGUMENT — the module-level object is `VOL` in capitals
+for exactly that reason.
 
 ## Never do this
 

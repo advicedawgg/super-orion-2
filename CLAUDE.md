@@ -33,8 +33,8 @@ frame for the whole coyote window. None of those were visible in the diff.
   its **top face**. Write Z anchors out in full — chaining them is how platforms silently
   overlapped and z-fought.
 - Anything the game and the checker must agree on lives in exactly ONE exported function
-  (`crateSolid`, `trunkSolid`, `killPlane`, `FLOATING` in `src/builder.js`; `tuning()` in
-  `src/physics.js`). Add to that list rather than duplicating a derivation. A checker that
+  (`crateSolid`, `trunkSolid`, `killPlane`, `FLOATING`, `FLORA` in `src/builder.js`; `tuning()`
+  in `src/physics.js`). Add to that list rather than duplicating a derivation. A checker that
   models the world separately is a checker that lies.
 - A level's `mode` (`'swim'` / `'jet'`) is a patch on `T`, read by both the game and the
   checker through `tuning(def.mode)`. Both REQUIRE a `ceilY`, and both meter lift with a
@@ -60,6 +60,13 @@ npx http-server -p 8791 -c-1      # -c-1 matters; http-server caches for an hour
 ```
 
 `file://` will not work — ES modules need an origin. Debug handle: `window.__SO2`.
+
+## What is newest (2026-08-19)
+
+A sixth level, **Crystal Cavern**, inserted at index 3 — World 2 needed a plain running level
+before the two free-movement ones. A **sound menu** (O, or the tappable pill on the title and
+pause cards) with music and SFX sliders. And the reef's backdrop is kelp and coral rather than
+the pine trees that had been growing underwater since it was built.
 
 ## What to work on
 

@@ -13,6 +13,7 @@ const KEYMAP = {
   // spin while backing up without slamming into the floor instead.
   KeyC: 'stomp', KeyL: 'stomp',
   Escape: 'pause', KeyP: 'pause', Enter: 'start', KeyM: 'mute', KeyR: 'restart',
+  KeyO: 'options',
 };
 
 // Three independent sources; `held` is their union, rebuilt every update().

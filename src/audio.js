@@ -4,8 +4,45 @@
 
 import { LOOPS } from './music.js';
 
-let ctx = null, bus = null, muted = false;
+let ctx = null, bus = null, musicBus = null, sfxBus = null, muted = false;
 let musicSrc = null, musicId = null;
+
+/* ------------------------------------------------------------- volume ---
+ * Two sub-busses under the master, because "the music is too loud" and "the
+ * jump blip is too loud" are different complaints and a single slider can only
+ * answer one of them. The master (`bus`) stays the mute switch and the overall
+ * trim; MIX is the ceiling each slider scales, so 100% still sits where the
+ * hand-tuned mix was — music under the SFX, not level with them.
+ *
+ * Saved under its own key rather than in the game save: sound settings are a
+ * property of this machine, and clearing your stars must not reset them. */
+const VOL_KEY = 'superOrion2Sound';
+// Named VOL, not `vol`: tone()/noise() take a `vol` argument and a shadowed
+// module global is how you write a slider that silently does nothing.
+const MIX = { music: 0.7, sfx: 1.0 };
+// Defaults reproduce the mix the game shipped with (music 0.8 * 0.7 * the 0.5
+// on the source = the old 0.28), so an existing player hears no change until
+// they touch a slider. Music has headroom above the default; SFX does not.
+const VOL = { music: 0.8, sfx: 1.0 };
+try { Object.assign(VOL, JSON.parse(localStorage.getItem(VOL_KEY) || '{}')); } catch { }
+
+/** Current 0..1 slider positions. A copy — set them through setVol(). */
+export const getVol = () => ({ ...VOL });
+
+/** Set one slider, 0..1. Applies live, persists, returns the clamped value. */
+export function setVol(kind, v) {
+  v = Math.max(0, Math.min(1, Math.round(v * 100) / 100));
+  VOL[kind] = v;
+  applyVol();
+  try { localStorage.setItem(VOL_KEY, JSON.stringify(VOL)); } catch { }
+  return v;
+}
+
+function applyVol() {
+  if (!ctx) return;                       // pre-init: init() applies it instead
+  musicBus.gain.value = VOL.music * MIX.music;
+  sfxBus.gain.value = VOL.sfx * MIX.sfx;
+}
 
 /** Must be called from a user gesture — browsers block audio before one. */
 export function init() {
@@ -14,6 +51,9 @@ export function init() {
   bus = ctx.createGain();
   bus.gain.value = 0.5;
   bus.connect(ctx.destination);
+  musicBus = ctx.createGain(); musicBus.connect(bus);
+  sfxBus = ctx.createGain(); sfxBus.connect(bus);
+  applyVol();
 }
 
 export function toggleMute() {
@@ -34,7 +74,7 @@ function tone(type, f0, f1, dur, vol, delay = 0) {
   g.gain.setValueAtTime(0, t);
   g.gain.linearRampToValueAtTime(vol, t + 0.006);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(bus);
+  o.connect(g).connect(sfxBus);
   o.start(t); o.stop(t + dur + 0.02);
 }
 
@@ -51,7 +91,7 @@ function noise(dur, vol, f0, f1, q = 1, delay = 0) {
   const g = ctx.createGain();
   g.gain.setValueAtTime(vol, t);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  src.connect(f).connect(g).connect(bus);
+  src.connect(f).connect(g).connect(sfxBus);
   src.start(t);
 }
 
@@ -124,8 +164,8 @@ export async function playMusic(id) {
   const L = LOOPS[id];
   if (L) { src.loopStart = L.loopStart; src.loopEnd = L.loopEnd; }
   const g = ctx.createGain();
-  g.gain.value = 0.28;             // sit well under the SFX
-  src.connect(g).connect(bus);
+  g.gain.value = 0.5;              // the rest of the trim lives on musicBus
+  src.connect(g).connect(musicBus);
   src.start(0);
   musicSrc = src;
 }

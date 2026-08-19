@@ -7,7 +7,7 @@
 // can't be reached. Eyeballing level geometry does not work. This does.
 
 import { LEVELS, HUB } from '../src/levels.js';
-import { buildLevel, killPlane, FLOATING, BODY } from '../src/builder.js';
+import { buildLevel, killPlane, FLOATING, BODY, FLORA } from '../src/builder.js';
 import { T, tuning, isFreeMode, hasTank } from '../src/physics.js';
 
 const SAFETY = 0.85;          // players are not frame-perfect; demand slack
@@ -309,6 +309,11 @@ for (const def of [...LEVELS, HUB]) {
         && Math.abs(s.y - t.y) < 0.4;
     });
     if (!onGround && !onSolid) fail(`tree at (${t.x},${t.y},${t.z}) is floating`);
+    // A kind world.js can't draw silently plants nothing at all.
+    if (!FLORA.has(t.kind || 'pine')) fail(`tree at (${t.x},${t.y},${t.z}) has unknown kind '${t.kind}'`);
+    // trunkSolid models a TREE TRUNK. Making kelp solid would put an invisible
+    // 6u post in the water where the art is a soft frond you swim through.
+    if (t.solid && (t.kind || 'pine') !== 'pine') fail(`${t.kind} at (${t.x},${t.y},${t.z}) is solid — only pines have a trunk`);
   }
 
   // Two platforms with the same top height that overlap in plan will z-fight:

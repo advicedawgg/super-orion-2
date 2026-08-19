@@ -51,8 +51,10 @@ const cleared = id => id in G.lv;
 const allCleared = () => LEVELS.every(l => cleared(l.id));
 // Progression is linear: the first is always open, and clearing one opens the
 // next. Everything you have already cleared stays open, so backtracking to
-// beat your score on an earlier level is always allowed.
-const unlocked = i => i === 0 || cleared(LEVELS[i - 1].id);
+// beat your score on an earlier level is always allowed — and so inserting a
+// new level into the middle of the list cannot relock the ones past it, which
+// is exactly what happened to an existing save when the cavern went in at 3.
+const unlocked = i => i === 0 || cleared(LEVELS[i].id) || cleared(LEVELS[i - 1].id);
 function persist() {
   G.best = Math.max(G.best, totalStars());
   localStorage.setItem(SAVE_KEY, JSON.stringify({ best: G.best, lv: G.lv }));
@@ -154,11 +156,112 @@ function drawTank() {
 // say which — from a level it is the map, from the map it is out of the game.
 const pauseCard = () => `<h1>PAUSED<small>TAKE YOUR TIME</small></h1>${KEYCARD}
   <p class="go">press P to keep going</p>
-  <p class="lead">…or press ↓ ${G.inHub ? 'to leave for the games menu' : 'to go back to the map'}</p>`;
+  <p class="lead">press O for sound ${SOUND_BTN}<br>
+  …or press ↓ ${G.inHub ? 'to leave for the games menu' : 'to go back to the map'}</p>`;
 
 const KEYCARD = `<div class="keys">
   <kbd>← →  ↑ ↓ / WASD</kbd><kbd>SPACE — jump ×2</kbd><kbd>X — spin</kbd>
-  <kbd>C in the air — ground pound</kbd><kbd>P — pause</kbd><kbd>M — music</kbd><kbd>R — restart</kbd></div>`;
+  <kbd>C in the air — ground pound</kbd><kbd>P — pause</kbd><kbd>O — sound</kbd>
+  <kbd>M — mute</kbd><kbd>R — restart</kbd></div>`;
+
+/* ------------------------------------------------------------ sound menu */
+// A tappable button, because a card that says "press O" is unreachable on a
+// tablet — where this game is played as much as on a keyboard.
+const SOUND_BTN = `<button class="pill" data-act="options">🔊 SOUND</button>`;
+
+const VOL_ROWS = [
+  { key: 'music', label: '🎵 MUSIC' },
+  { key: 'sfx', label: '💥 EFFECTS' },
+];
+let volRow = 0;
+
+function optionsCard() {
+  const v = Sound.getVol();
+  return `<h1>SOUND<small>SET IT HOW YOU LIKE</small></h1>
+    <div class="opts">${VOL_ROWS.map((r, i) => `
+      <div class="opt${i === volRow ? ' on' : ''}" data-row="${i}">
+        <span class="lbl">${r.label}</span>
+        <button class="nudge" data-row="${i}" data-d="-1">−</button>
+        <span class="meter" data-row="${i}"><i style="transform:scaleX(${v[r.key]})"></i></span>
+        <button class="nudge" data-row="${i}" data-d="1">+</button>
+        <span class="pct">${Math.round(v[r.key] * 100)}%</span>
+      </div>`).join('')}</div>
+    ${Sound.isMuted() ? `<p class="lead"><b>Everything is muted — press M to unmute.</b></p>`
+      : `<p class="lead">↑ ↓ pick a row · ← → turn it up or down<br>…or just drag the bar.</p>`}
+    <p class="go">press O to go back</p>`;
+}
+
+/** Repaint in place. Called on every nudge, so it must stay cheap. */
+function paintOptions() {
+  const v = Sound.getVol();
+  card.querySelectorAll('.opt').forEach((el, i) => {
+    el.classList.toggle('on', i === volRow);
+    el.querySelector('.meter i').style.transform = `scaleX(${v[VOL_ROWS[i].key]})`;
+    el.querySelector('.pct').textContent = `${Math.round(v[VOL_ROWS[i].key] * 100)}%`;
+  });
+}
+
+function openOptions(from) {
+  G.optFrom = from;
+  G.state = 'OPTIONS';
+  // A volume slider you cannot hear is a slider you cannot set: bring the audio
+  // context up (this is inside a keypress/tap, so the browser allows it) and
+  // put a track on if the screen we came from is silent.
+  Sound.init();
+  Sound.resumeMusic();
+  Sound.playMusic('title');
+  show(optionsCard());
+}
+
+function closeOptions() {
+  if (G.optFrom === 'PAUSED') {
+    G.state = 'PAUSED';
+    // Back to a paused game: the level's own track, silenced again.
+    Sound.playMusic((G.inHub ? HUB : LEVELS[G.level]).music || (G.inHub ? HUB : LEVELS[G.level]).id);
+    Sound.pauseMusic();
+    show(pauseCard());
+  } else title();
+}
+
+/** Move the selected slider by `d` tenths and let you hear what you did. */
+function nudgeVol(d) {
+  const r = VOL_ROWS[volRow];
+  Sound.setVol(r.key, Sound.getVol()[r.key] + d * 0.1);
+  paintOptions();
+  Sound.sfx(r.key === 'sfx' ? 'star' : 'step');
+}
+
+/** Drag or tap anywhere on a bar to set it outright. */
+function setVolFromPointer(meter, clientX) {
+  const b = meter.getBoundingClientRect();
+  volRow = +meter.dataset.row;
+  Sound.setVol(VOL_ROWS[volRow].key, (clientX - b.left) / b.width);
+  paintOptions();
+}
+
+// One delegated listener on the card, which survives every innerHTML swap.
+// The elements themselves opt into pointer-events; #overlay must not, or the
+// card would swallow taps on the touch buttons underneath it.
+let volDrag = null;
+card.addEventListener('pointerdown', e => {
+  const act = e.target.closest('[data-act]');
+  if (act) {
+    e.preventDefault();
+    if (act.dataset.act === 'options') openOptions(G.state);
+    return;
+  }
+  if (G.state !== 'OPTIONS') return;
+  const nu = e.target.closest('.nudge');
+  if (nu) { e.preventDefault(); volRow = +nu.dataset.row; nudgeVol(+nu.dataset.d); return; }
+  const meter = e.target.closest('.meter');
+  if (meter) {
+    e.preventDefault();
+    volDrag = meter; meter.setPointerCapture?.(e.pointerId);
+    setVolFromPointer(meter, e.clientX);
+  }
+});
+card.addEventListener('pointermove', e => { if (volDrag) setVolFromPointer(volDrag, e.clientX); });
+for (const ev of ['pointerup', 'pointercancel']) card.addEventListener(ev, () => { volDrag = null; });
 
 /* ----------------------------------------------------------------- events */
 // A stroke throws a puff of bubbles as well as a sound — underwater you should
@@ -297,7 +400,7 @@ function gameWin() {
   persist();
   show(`<h1>YOU DID IT<small>SUPER ORION 2</small></h1>
     <p class="lead"><b>${totalStars()}</b> stars collected. Best ever: <b>${G.best}</b>.<br>
-    Jungle, coast, peaks, reef and the whole sky — you cleared the lot.</p>
+    Jungle, coast, peaks, the cavern, the reef and the whole sky — you cleared the lot.</p>
     <p class="go">press SPACE for the map</p>`);
 }
 
@@ -307,6 +410,7 @@ function title() {
   show(`<h1>SUPER ORION 2<small>COSMIC CANNONBALL</small></h1>
     <p class="lead">Run, jump, spin and stomp your way through ${LEVELS.length} levels.<br>
     Smash every crate. Collect every star.</p>${KEYCARD}
+    <p class="lead">${SOUND_BTN}</p>
     <p class="go">press SPACE to start</p>`);
   G.sawWin = false;
 }
@@ -429,6 +533,7 @@ function frame(now) {
 
   switch (G.state) {
     case 'TITLE':
+      if (In.hit('options')) { openOptions('TITLE'); break; }
       if (In.hitAny()) { Sound.init(); enterHub(); }
       break;
     // The map. Same movement and same camera as a level — it IS a level, minus
@@ -474,12 +579,30 @@ function frame(now) {
       break;
     }
     case 'PAUSED':
+      // `spin` as well as O: a gamepad and a touchscreen have no letter keys,
+      // and X / ✹ is the only free button on the pause card.
+      if (In.hit('options') || In.hit('spin')) { openOptions('PAUSED'); break; }
       if (In.hit('pause')) { G.state = G.inHub ? 'HUB' : 'PLAY'; hideOverlay(); Sound.resumeMusic(); }
       // ↓ while paused: from a level, back to the map — that is the "quit to
       // the level map" this game now actually has. From the map itself, out to
       // the launcher menu, which is where it used to always go.
       else if (In.hit('down')) { if (G.inHub) location.href = $('quit').href; else { Sound.resumeMusic(); enterHub(); } }
       break;
+    // Sliders, driven by whatever you have: arrows, d-pad, or a finger on the
+    // bar. Held ← → repeats after a beat — a kid dropping the music from 100
+    // to 20 should not be twenty separate presses.
+    case 'OPTIONS': {
+      if (In.hit('options') || In.hit('pause') || In.hit('start')) { closeOptions(); break; }
+      if (In.hit('up') || In.hit('down')) {
+        volRow = (volRow + (In.hit('up') ? VOL_ROWS.length - 1 : 1)) % VOL_ROWS.length;
+        paintOptions(); Sound.sfx('step');
+      }
+      const dir = (In.down('right') ? 1 : 0) - (In.down('left') ? 1 : 0);
+      if (!dir) { G.repeatT = 0; break; }
+      if (In.hit('left') || In.hit('right')) { G.repeatT = 0.34; nudgeVol(dir); }
+      else if ((G.repeatT -= dt) <= 0) { G.repeatT = 0.1; nudgeVol(dir); }
+      break;
+    }
     case 'DYING':
       if ((G.timer -= dt) <= 0) G.lives > 0 ? respawn() : gameOver();
       break;
