@@ -45,7 +45,34 @@ addEventListener('blur', () => keys.clear());
 /* --------------------------------------------------------- typed cheats */
 let buf = '';
 const CHEATS = new Map();
-export const cheat = (word, fn) => CHEATS.set(word, fn);
+
+/** Every letter that is also a game key. Derived from KEYMAP, not hand-listed,
+ *  so remapping a control can never leave this stale. */
+const KEY_LETTERS = new Set(Object.keys(KEYMAP)
+  .filter(c => /^Key[A-Z]$/.test(c)).map(c => c[3].toLowerCase()));
+// Keys that do something you'd notice and hate mid-word. M is in KEYMAP; F is
+// handled straight off keydown in main.js, so it has to be named here.
+const DISRUPTIVE = new Set(['p', 'r', 'm', 'f']);
+
+/**
+ * Register a typed cheat — and refuse the two ways of getting one wrong, at
+ * boot, loudly, because both of them shipped:
+ *
+ * 1. A word spelled ENTIRELY from movement keys fires itself. 'dad' is d-a-d,
+ *    which is just running right, left, right: the joke went off every few
+ *    seconds all game. A word needs at least one letter you can only produce
+ *    by deliberately typing it.
+ * 2. A word containing P, R, M or F pauses, restarts, mutes or goes fullscreen
+ *    while you type it. 'star' contained the R, so collecting the stars threw
+ *    you back to the checkpoint. (Game 1 lost 'mum' the same way.)
+ */
+export function cheat(word, fn) {
+  const bad = [...word].find(ch => DISRUPTIVE.has(ch));
+  if (bad) throw new Error(`cheat '${word}': '${bad}' is pause/restart/mute/fullscreen — pick another word`);
+  if ([...word].every(ch => KEY_LETTERS.has(ch)))
+    throw new Error(`cheat '${word}' is spelled entirely from game keys — normal play would fire it`);
+  CHEATS.set(word, fn);
+}
 function typed(k) {
   if (!/^[a-z]$/i.test(k)) return;
   buf = (buf + k.toLowerCase()).slice(-12);

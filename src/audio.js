@@ -125,6 +125,21 @@ const SFX = {
   life: () => [0, 1, 2, 3].forEach(i => tone('square', [523, 659, 784, 1047][i], [523, 659, 784, 1047][i], .18, .14, i * .07)),
   die: () => [0, 1, 2, 3].forEach(i => tone('square', [660, 550, 440, 220][i], [660, 550, 440, 220][i], .26, .16, i * .12)),
   win: () => [523, 659, 784, 1047, 1319].forEach((f, i) => { tone('square', f, f, .30, .15, i * .11); tone('triangle', f * 2, f * 2, .30, .07, i * .11); }),
+
+  /* ---- the boss ---- */
+  // A heavy man leaving the ground, and a heavy man arriving.
+  bosshop: () => { tone('sawtooth', 90, 240, .22, .16); noise(.18, .07, 200, 700, .8); },
+  bossland: () => { tone('sine', 96, 38, .34, .26); noise(.26, .18, 260, 70, .6); tone('square', 70, 46, .22, .10, .02); },
+  bosshit: () => { tone('square', 300, 140, .26, .18); tone('sawtooth', 180, 90, .3, .12, .03); noise(.2, .12, 700, 200, 1); },
+  bossdown: () => [392, 349, 311, 262, 196].forEach((f, i) => { tone('sawtooth', f, f * .96, .34, .13, i * .13); tone('square', f / 2, f / 2, .34, .07, i * .13); }),
+  gate: () => { noise(.7, .22, 900, 90, .5); tone('sawtooth', 150, 40, .6, .12); },
+  // Dad says something. A blurt, not a word — the toast carries the joke.
+  quip: () => { tone('square', 180, 150, .07, .08); tone('square', 165, 200, .07, .07, .08); },
+
+  /* ---- easter eggs ---- */
+  rimshot: () => { noise(.07, .22, 320, 180, 1.2); noise(.07, .20, 380, 200, 1.2, .1); noise(.6, .16, 5200, 3000, .5, .2); },
+  // Yes, it is a fart. He is seven.
+  toot: () => { tone('sawtooth', 130, 62, .42, .17); noise(.42, .10, 260, 90, 3.2); tone('square', 96, 54, .34, .07, .05); },
 };
 
 export function sfx(name) { SFX[name]?.(); }

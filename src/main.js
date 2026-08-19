@@ -144,6 +144,15 @@ function drawHUD() {
   $('lives').textContent = `🐱 ${G.lives}`;
 }
 
+// The boss's crowns. Only exists while a boss does, which is one level.
+const bossEl = $('boss');
+function drawBoss(hp) {
+  const king = world?.enemies.find(e => e.kind === 'king');
+  const n = hp ?? king?.hp ?? 0;
+  bossEl.classList.toggle('on', !!king && king.alive);
+  bossEl.innerHTML = [0, 1, 2].map(i => `<span class="${i < n ? '' : 'gone'}">👑</span>`).join('');
+}
+
 // Air / fuel. Only shown in a mode that meters lift, because in every other
 // mode it is pinned full and a permanently-full bar is just noise.
 const tankEl = $('tank'), tankBar = tankEl.querySelector('i');
@@ -283,6 +292,29 @@ function worldFx(name, at, info) {
     case 'bonk': Sound.sfx('bonk'); burst(at, 0xffffff, 12, 7); break;
     case 'hurt': damage(); break;
     case 'checkpoint': Sound.sfx('checkpoint'); toast('CHECKPOINT!'); burst(at, 0xff5d73, 16, 8); G.spawn.copy(at); break;
+
+    /* ---- the boss ---- */
+    // He talks the whole fight. `tip` styling, because a chore is a sentence
+    // and the big gold toast is sized for two words.
+    case 'quip': toast(info.say, true); Sound.sfx('quip'); break;
+    case 'bosshop': Sound.sfx('bosshop'); break;
+    case 'bossland':
+      Sound.sfx('bossland');
+      burst(at.clone().setY(at.y + .2), 0xd9c39a, 14, 6);
+      break;
+    case 'bosshit':
+      Sound.sfx('bosshit');
+      burst(at.clone().setY(at.y + 1.6), 0xffd23f, 20, 9);
+      drawBoss(info.hp);
+      toast(info.say, true);
+      break;
+    case 'bossdown':
+      Sound.sfx('bossdown');
+      burst(at.clone().setY(at.y + 1.4), 0xffd23f, 30, 11);
+      drawBoss(0);
+      toast(info.say, true);
+      break;
+    case 'gate': Sound.sfx('gate'); burst(at, 0x8892a6, 22, 9); break;
   }
   drawHUD();
 }
@@ -321,6 +353,7 @@ function loadWorld(def) {
   player.reset(G.spawn);
   snapCamera();
   Sound.playMusic(def.music || def.id);
+  drawBoss();
   if (def.hint) toast(def.hint, true);
   return def;
 }
@@ -400,7 +433,8 @@ function gameWin() {
   persist();
   show(`<h1>YOU DID IT<small>SUPER ORION 2</small></h1>
     <p class="lead"><b>${totalStars()}</b> stars collected. Best ever: <b>${G.best}</b>.<br>
-    Jungle, coast, peaks, the cavern, the reef and the whole sky — you cleared the lot.</p>
+    Jungle, coast, peaks, the cavern, the reef, the whole sky — and King Dad himself.<br>
+    Dad dethroned. Ten more minutes for everyone.</p>
     <p class="go">press SPACE for the map</p>`);
 }
 
@@ -409,7 +443,7 @@ function title() {
   Sound.stopMusic();
   show(`<h1>SUPER ORION 2<small>COSMIC CANNONBALL</small></h1>
     <p class="lead">Run, jump, spin and stomp your way through ${LEVELS.length} levels.<br>
-    Smash every crate. Collect every star.</p>${KEYCARD}
+    Smash every crate. Collect every star. Then go and sort out Dad.</p>${KEYCARD}
     <p class="lead">${SOUND_BTN}</p>
     <p class="go">press SPACE to start</p>`);
   G.sawWin = false;
@@ -631,8 +665,43 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyM') toast(Sound.toggleMute() ? '🔇 muted' : '🔊 sound on');
   if (e.code === 'KeyF') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.();
 });
+/* ------------------------------------------------------------ easter eggs */
+// Typed words, the way game 1 did them — they were the kid's favourite part.
+//
+// THE TRAP, both halves of which shipped once: a typed cheat's letters are
+// still live game keys, so (1) a word made only of movement letters fires
+// itself while you play — 'dad' is d-a-d, which is running right, left, right
+// — and (2) a P, R, M or F pauses, restarts, mutes or goes fullscreen mid-word,
+// which is how 'star' used to throw you back to the checkpoint.
+//
+// `In.cheat()` now throws at boot on either, so this comment is a courtesy and
+// the rule is the code. It is why the fart is spelled 'toot'.
+const JOKES = [
+  'Why did the scarecrow win an award? He was OUTSTANDING in his field.',
+  "What do you call a fish with no eyes? Fsh.",
+  'I only know 25 letters of the alphabet. I don\u2019t know y.',
+  'Why did the bicycle fall over? It was two tired.',
+  'What do you call cheese that isn\u2019t yours? Nacho cheese.',
+  'How does the moon cut his hair? Eclipse it.',
+  'Why did the golfer bring two pairs of trousers? In case he got a hole in one.',
+  'What did the ocean say to the beach? Nothing. It just waved.',
+  'I used to hate facial hair… but then it grew on me.',
+];
 In.cheat('sootie', () => { G.lives += 3; toast('🐱 SOOTIE SAYS HI (+3)'); Sound.sfx('life'); drawHUD(); });
-In.cheat('star', () => { G.stars += 10; toast('⭐ +10'); Sound.sfx('star'); drawHUD(); });
+In.cheat('shiny', () => { G.stars += 10; toast('⭐ +10'); Sound.sfx('star'); drawHUD(); });
+In.cheat('daddy', () => { toast('👨 DAD SAYS: ' + JOKES[Math.floor(Math.random() * JOKES.length)], true); Sound.sfx('rimshot'); });
+In.cheat('love', () => {
+  G.hearts = 3; drawHUD(); Sound.sfx('checkpoint');
+  burst(player.pos.clone().setY(player.pos.y + 1.2), 0xff5d73, 18, 7);
+  toast('💖 ALL BETTER');
+});
+In.cheat('toot', () => {
+  Sound.sfx('toot');
+  // Behind him, which is the only place it would be funny.
+  burst(player.pos.clone().setY(player.pos.y + .5), 0x9fd14a, 16, 5);
+  toast('💨 EXCUSE YOU');
+});
+In.cheat('egg', () => { G.stars += 25; toast('🥚 GOLDEN EGG (+25)'); Sound.sfx('star'); drawHUD(); });
 
 async function boot() {
   // Painting the procedural textures costs a few hundred ms; do it up front

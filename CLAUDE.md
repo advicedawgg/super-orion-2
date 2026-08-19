@@ -63,10 +63,16 @@ npx http-server -p 8791 -c-1      # -c-1 matters; http-server caches for an hour
 
 ## What is newest (2026-08-19)
 
-A sixth level, **Crystal Cavern**, inserted at index 3 — World 2 needed a plain running level
-before the two free-movement ones. A **sound menu** (O, or the tappable pill on the title and
-pause cards) with music and SFX sliders. And the reef's backdrop is kelp and coral rather than
-the pine trees that had been growing underwater since it was built.
+**Crystal Cavern** at index 3 (World 2 needed a plain running level before the two free-movement
+ones) and **King Dad's Castle** at 6 — the game's first boss, and its ending. A **sound menu**
+(O, or the tappable pill on the title and pause cards). Typed **easter eggs** — `dad`, `love`,
+`toot`, `egg` on top of the existing `sootie` and `star`; see AGENTS.md for the letter trap that
+governs which words are legal. And the reef's backdrop is kelp and coral rather than the pine
+trees that had been growing underwater since it was built.
+
+The boss is the one thing in the repo the gate cannot fully prove — `tools/check.js` pairs the
+king with his gate and proves his arena, but the fight itself needs a browser. See AGENTS.md →
+The boss.
 
 ## What to work on
 

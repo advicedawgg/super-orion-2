@@ -198,6 +198,44 @@ context up and puts a track on, because a volume slider you cannot hear is a sli
 set. Note `tone()`/`noise()` take a `vol` ARGUMENT — the module-level object is `VOL` in capitals
 for exactly that reason.
 
+## The boss
+
+`ENEMY.king` in `src/world.js`. Everything that makes him a boss rather than a big grumblin:
+
+- **`hp`.** `World.kill()` treats a hit as a phase change while `hp > 1`: decrement, 1.1s of
+  `invT` (during which he neither takes another hit nor hurts you — without it one stomp reads
+  as three), shorten `hopGap` by a quarter, and say something. Only the last hit kills.
+- **The crouch.** He waits, crouches for 0.38s, then hops at where you are. The telegraph IS
+  the fight; shorten it and a seven-year-old just gets hit.
+- **`arena`.** A radius around where he was placed, clamped every frame — in flight, not just
+  on landing. He is heavy and he lands where he likes; unleashed he goes over the side, and a
+  boss in the sea is a gate that never opens. `tools/check.js` proves a single floor covers
+  that whole circle.
+- **`B.gate()`** is a solid tagged `scenery` (collides, isn't a platform, isn't the checker's
+  reachability problem) that `openGates()` removes from `solids` before it animates. Collision
+  first, art second. The checker pairs gate and king in both directions.
+- He is `spinProof`. A boss you can beat from the floor without leaving it is not a boss.
+- **His lines are chores.** `CHORES` / `HIT_1` / `HIT_2` / `DEFEAT` in `world.js`. The joke is
+  that the final boss is bedtime — keep it homework and teeth, not menace.
+- Damage does NOT reset when you die: the boss keeps his hp and his rage across a respawn,
+  which is the kind thing to do to a kid on his fourth attempt.
+
+## Easter eggs
+
+`In.cheat(word, fn)` in `src/main.js`. **A typed cheat's letters are still live game keys**, which
+breaks a word in two different ways — both of which shipped, so `cheat()` now throws at boot on
+either rather than trusting anyone to remember:
+
+- **All-movement words fire themselves.** The dad joke was `dad`: d-a-d is running right, left,
+  right, so it went off every few seconds of normal play. A word needs at least one letter that
+  isn't in `KEYMAP`.
+- **P, R, M or F anywhere in the word** pauses, restarts, mutes or goes fullscreen as you type it.
+  The star cheat was `star` — the R sent you back to the checkpoint every time. Game 1 lost `mum`
+  to the two Ms.
+
+The letter set is derived from `KEYMAP` rather than hand-listed, so remapping a control can't leave
+the guard stale. It is why the fart is spelled `toot`.
+
 ## Never do this
 
 - **Do not change the physics constants to fix a level.** Change the level. `T` in

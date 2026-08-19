@@ -11,6 +11,10 @@ import { buildLevel, killPlane, FLOATING, BODY, FLORA } from '../src/builder.js'
 import { T, tuning, isFreeMode, hasTank } from '../src/physics.js';
 
 const SAFETY = 0.85;          // players are not frame-perfect; demand slack
+// Mirrors the default on the king in src/world.js. If you change it there,
+// change it here — or better, pass `arena` explicitly in the level, which is
+// what every real boss placement does.
+const ENEMY_ARENA_DEFAULT = 12;
 
 /* ------------------------------------------------------------- jump model */
 // Derived per level from tuning(def.mode), so a swim or flight level is judged
@@ -293,6 +297,32 @@ for (const def of [...LEVELS, HUB]) {
     }
     if (worst)
       fail(`${e.kind} at (${e.x},${e.y},${e.z}) sweeps ${worst.pen.toFixed(1)}u into the ${worst.s.tex} at (${worst.s.x},${worst.s.y},${worst.s.z})`);
+  }
+
+  /* ---- boss levels ----
+   * The gate opens when the boss goes down, so the two are one mechanism and
+   * either one alone is a broken level: a gate with no king never opens (the
+   * goal behind it is unreachable forever), and a king with no gate is a boss
+   * you can simply run past. The flood fill cannot see this — a gate is
+   * `scenery`, so it isn't a platform and doesn't block a jump — which is
+   * exactly why it needs its own pass.
+   */
+  const kings = d.enemies.filter(e => e.kind === 'king');
+  const gates = d.gates || [];
+  if (gates.length && !kings.length) fail(`${gates.length} gate(s) but no king to open them`);
+  if (kings.length && !gates.length) fail('a king with no gate() guards nothing');
+  if (kings.length > 1) fail(`${kings.length} kings — the gate opens on the first one down`);
+  for (const k of kings) {
+    // He is leashed to a radius around where he was placed. Unleashed he
+    // wanders off the arena, and a boss in the sea is a gate that never opens.
+    const r = k.opt.arena ?? ENEMY_ARENA_DEFAULT;
+    const floor = d.solids.find(s => {
+      const q = rect(s);
+      return !s.scenery && Math.abs(s.y - k.y) < 0.4
+        && k.x - r >= q.x0 - .01 && k.x + r <= q.x1 + .01
+        && k.z - r >= q.z0 - .01 && k.z + r <= q.z1 + .01;
+    });
+    if (!floor) fail(`king at (${k.x},${k.y},${k.z}) has arena ${r} but no single floor covers that circle`);
   }
 
   // Nothing playable should sit at or below the kill plane.

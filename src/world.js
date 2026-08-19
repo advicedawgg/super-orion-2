@@ -93,6 +93,7 @@ export class World {
     this.stars = data.stars.map(s => this.addStar(s));
     this.enemies = data.enemies.map(e => this.addEnemy(e));
     this.checkpoints = data.checkpoints.map(c => this.addCheckpoint(c));
+    this.gates = (data.gates || []).map(g => this.addGate(g));
     this.flora = [];                          // sway pivots; see addKelp
     for (const t of data.trees) this.addTree(t);
     this.portals = (data.portals || []).map(p => this.addPortal(p));
@@ -475,6 +476,15 @@ export class World {
   update(dt, player) {
     this.time += dt;
     this.moveMovers(dt, player);
+    // A crumbling gate: it sinks into its own lintel and is gone. Cheap, and
+    // it reads as "that opened" from anywhere in the arena.
+    for (const gt of this.gates) {
+      if (!gt.falling || gt.t >= 1) continue;
+      gt.t = Math.min(1, gt.t + dt * 1.1);
+      gt.g.position.y = gt.s.y - gt.t * (gt.s.h + 1.2);
+      gt.g.rotation.z = gt.t * .12;
+      if (gt.t >= 1) gt.g.visible = false;
+    }
     // The current. One sine per joint, and nesting does the rest.
     for (const f of this.flora) f.node.rotation.z = Math.sin(this.time * f.speed + f.phase) * f.amp;
 
@@ -607,8 +617,14 @@ export class World {
 
   updateEnemy(e, dt, player) {
     e.t += dt;
-    e.tick(e, dt);
-    if (e.pos.distanceTo(player.pos) > 3.4) return;
+    // The player goes to the tick because the boss chases; every other tick
+    // ignores the argument.
+    e.tick(e, dt, player, this);
+    // Just been stomped: he is flashing, and for that beat he neither hurts you
+    // nor counts another hit. Without it one stomp reads as three and the
+    // fight is over before the kid has seen it.
+    if (e.invT > 0) { e.invT -= dt; return; }
+    if (e.pos.distanceTo(player.pos) > 3.4 + (e.radius || 0)) return;
     if (player.spinning && !e.spinProof && horiz(player.pos, e.pos) < T.SPIN_R + e.radius
       && Math.abs(player.pos.y - e.pos.y) < e.height + 1) return this.kill(e, player, 'spin');
     if (!near(player.pos, e.pos, e.radius + .55, e.height + .4)) return;
@@ -619,9 +635,51 @@ export class World {
   }
 
   kill(e, player, how) {
+    // A boss has `hp`. Every hit but the last is a phase change, not a death:
+    // he flashes, he speeds up, and he has something to say about it.
+    if (e.hp > 1) {
+      e.hp--;
+      e.invT = 1.1;
+      e.hopGap *= 0.74;                      // rage: hops come faster each time
+      if (how === 'stomp') player.bounce();
+      this.fx('bosshit', e.pos.clone(), { hp: e.hp, say: e.onHit && e.onHit(e) });
+      return;
+    }
     e.alive = false; e.mesh.visible = false;
     if (how === 'stomp') player.bounce();
+    if (e.hp) { this.openGates(); this.fx('bossdown', e.pos.clone(), { say: e.onDown && e.onDown(e) }); return; }
     this.fx('bonk', e.pos.clone());
+  }
+
+  /* ---- the boss gate ---- */
+  addGate(s) {
+    const g = new THREE.Group();
+    g.position.set(s.x, s.y, s.z);
+    const bar = surface('metal');
+    const lintel = new THREE.Mesh(tiledBox(s.w, .9, s.d, 4), bar);
+    lintel.position.y = -.45; g.add(lintel);
+    // Bars, not a slab: you can see the goal through it, which is the whole
+    // point of a locked door in a kid's game — it has to promise something.
+    const n = Math.max(3, Math.round(s.w / 1.6));
+    for (let i = 0; i < n; i++) {
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, s.h - .9, 7), bar);
+      b.position.set(-s.w / 2 + (i + .5) * (s.w / n), -.9 - (s.h - .9) / 2, 0);
+      g.add(b);
+    }
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    this.group.add(g);
+    return { s, g, falling: false, t: 0 };
+  }
+
+  /** Boss down: every gate drops out of the world and stops colliding. */
+  openGates() {
+    for (const gt of this.gates) {
+      if (gt.falling) continue;
+      gt.falling = true;
+      const i = this.solids.indexOf(gt.s);
+      if (i >= 0) this.solids.splice(i, 1);   // collision goes FIRST, then the art
+    }
+    if (this.gates.length) this.fx('gate', this.gates[0].g.position.clone());
   }
 
   // Geometries and materials are cached and shared across levels, so tearing a
@@ -730,6 +788,31 @@ function topper(kind) {
 
 /* --------------------------------------------------------------- enemies */
 const lam = c => new THREE.MeshLambertMaterial({ color: c });
+const pick = a => a[Math.floor(Math.random() * a.length)];
+
+/* King Dad's material. He is not a demon lord; he is a dad at 7:30pm, and
+ * every line he has is a chore. That is the joke — keep it chores. */
+const CHORES = [
+  'HAVE YOU DONE YOUR HOMEWORK?',
+  'GO AND BRUSH YOUR TEETH!',
+  'TIDY YOUR ROOM!',
+  "SCREEN TIME'S UP!",
+  'PUT YOUR SHOES AWAY!',
+  'EAT YOUR VEGETABLES!',
+  'ONE MORE EPISODE. THEN BED.',
+  'WHO LEFT ALL THE LIGHTS ON?',
+  'BECAUSE I SAID SO!',
+  'DID YOU FEED THE CAT?',
+  'WASH YOUR HANDS!',
+  'STOP JUMPING ON THE FURNITURE!',
+];
+const HIT_1 = ['OW! RIGHT, NO PUDDING.', "THAT'S ONE. I'M COUNTING.", 'I JUST HOOVERED IN HERE!'];
+const HIT_2 = ["DON'T MAKE ME COUNT TO THREE!", "TWO… I'M TELLING YOUR MUM.", 'MY BACK! MY ACTUAL BACK!'];
+const DEFEAT = [
+  'ALL RIGHT, ALL RIGHT — TEN MORE MINUTES.',
+  'FINE. YOU WIN. PIZZA FOR TEA.',
+  "OK, BUT YOU'RE STILL BRUSHING YOUR TEETH.",
+];
 
 export const ENEMY = {
   // Waddles back and forth. The bread-and-butter stomp customer.
@@ -832,6 +915,133 @@ export const ENEMY = {
       e.pos.y = e.home.y + Math.sin(e.t * 1.8) * e.bob;
       for (const c of e.mesh.children) if (c.name === 'arc') c.rotation.z += dt * 6;
     },
+  },
+  /* ---- the boss ----
+   * King Dad, from game 1: bald, short black beard, a crown, and a TV remote he
+   * points at you like a sceptre. Three stomps — a ground pound counts, since
+   * that is a stomp with commitment. The spin bounces off him: a boss you can
+   * beat from the floor without ever leaving it is not a boss.
+   *
+   * He does not patrol: he WAITS, telegraphs with a crouch, then hops at where
+   * you are. The crouch is the whole fight — it is what makes "get out from
+   * under him, then land on him" a thing a seven-year-old can read. Each hit
+   * shortens the gap between hops by a quarter, so he gets angrier and the
+   * fight has a shape.
+   *
+   * `arena` clamps him to a radius around where he was placed. He is heavy and
+   * he lands where he likes; without it he walks off the edge, and a boss in a
+   * pit is a gate that never opens.
+   */
+  king: {
+    ...BODY.king, spinProof: true, stompProof: false, hp: 3, hopGap: 2.1, arena: 12,
+    build() {
+      const g = new THREE.Group();
+      const gown = lam(0x2f6fd0), trim = lam(0x1e4d94), skin = lam(0xf0c9a0);
+      const hair = lam(0x241a14);
+      // WIDE rather than tall. He has to read as twice the kid without his head
+      // leaving stomping range — BODY.king.height is 2.6, so the stomp window
+      // opens 2.05 above his feet and anything much over 3 is a head you can
+      // see and cannot land on.
+      const body = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.55, 1.5), gown);
+      body.position.y = 1.05; body.name = 'body'; g.add(body);
+      const hem = new THREE.Mesh(new THREE.BoxGeometry(2.5, .38, 1.62), trim);
+      hem.position.y = .36; g.add(hem);
+      const collar = new THREE.Mesh(new THREE.BoxGeometry(1.5, .22, 1.15), trim);
+      collar.position.y = 1.86; g.add(collar);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(1.32, 1.1, 1.2), skin);
+      head.position.y = 2.48; head.name = 'head'; g.add(head);
+      // Bald on top, short black beard under. Orion specified this in game 1,
+      // and it is the only reason the shape reads as Dad rather than as a king.
+      const beard = new THREE.Mesh(new THREE.BoxGeometry(1.18, .58, 1.12), hair);
+      beard.position.y = 2.02; g.add(beard);
+      const nose = new THREE.Mesh(new THREE.BoxGeometry(.24, .3, .26), skin);
+      nose.position.set(0, 2.48, .66); g.add(nose);
+      for (const sx of [-1, 1]) {
+        const eye = new THREE.Mesh(new THREE.BoxGeometry(.3, .32, .1), lam(0xffffff));
+        eye.position.set(sx * .34, 2.66, .6); g.add(eye);
+        const pup = new THREE.Mesh(new THREE.BoxGeometry(.13, .16, .08), lam(0x1a1a1a));
+        pup.position.set(sx * .34, 2.63, .66); g.add(pup);
+        // Angry eyebrows do more for "boss" than any amount of geometry.
+        const brow = new THREE.Mesh(new THREE.BoxGeometry(.42, .13, .13), hair);
+        brow.position.set(sx * .34, 2.92, .62); brow.rotation.z = -sx * .3; g.add(brow);
+        const ear = new THREE.Mesh(new THREE.BoxGeometry(.14, .3, .3), skin);
+        ear.position.set(sx * .72, 2.48, 0); g.add(ear);
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(.44, 1.15, .44), gown);
+        arm.position.set(sx * 1.32, 1.15, .1); arm.name = 'arm' + (sx < 0 ? 'L' : 'R'); g.add(arm);
+        const hand = new THREE.Mesh(new THREE.BoxGeometry(.34, .3, .34), skin);
+        hand.position.set(sx * 1.32, .52, .12); g.add(hand);
+        const foot = new THREE.Mesh(new THREE.BoxGeometry(.62, .32, .95), lam(0x8d5fbf));
+        foot.position.set(sx * .58, .16, .2); g.add(foot);          // slippers
+      }
+      // The crown: four points, because five is a lot of triangles for a hat.
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(.72, .72, .3, 10), lam(0xffd23f));
+      band.position.y = 3.12; g.add(band);
+      for (let i = 0; i < 4; i++) {
+        const a = i / 4 * Math.PI * 2;
+        const pt = new THREE.Mesh(new THREE.ConeGeometry(.2, .5, 4), lam(0xffd23f));
+        pt.position.set(Math.cos(a) * .58, 3.45, Math.sin(a) * .58); g.add(pt);
+      }
+      // The sceptre of dads everywhere.
+      const remote = new THREE.Mesh(new THREE.BoxGeometry(.26, .72, .2), lam(0x23242a));
+      remote.position.set(1.32, .95, .42); remote.rotation.x = -.35; g.add(remote);
+      const btn = new THREE.Mesh(new THREE.BoxGeometry(.12, .12, .07), lam(0xff4d4d));
+      btn.position.set(1.32, 1.2, .56); g.add(btn);
+      return g;
+    },
+    tick(e, dt, player, world) {
+      // First frame: pick up the fight state. Everything here is per-instance,
+      // because ENEMY entries are shared prototypes and two levels must not
+      // share one boss's rage.
+      if (e.st === undefined) { e.st = 'wait'; e.cd = 1.4; e.vy = 0; e.sayT = 4; }
+
+      // Always face the kid. A boss with his back to you is a boss you can't read.
+      const dx = player.pos.x - e.pos.x, dz = player.pos.z - e.pos.z;
+      const want = Math.atan2(dx, dz);
+      e.mesh.rotation.y += ((want - e.mesh.rotation.y + Math.PI * 3) % (Math.PI * 2) - Math.PI) * Math.min(1, dt * 6);
+
+      const body = e.mesh.getObjectByName('body');
+      if (e.st === 'wait') {
+        e.cd -= dt;
+        body.scale.set(1, 1 + Math.sin(e.t * 3) * .04, 1);          // breathing
+        if (e.cd <= 0) { e.st = 'crouch'; e.cd = .38; }
+        // Chores, on a timer. This is the joke and it is the whole reason the
+        // arena is quiet between hops.
+        if ((e.sayT -= dt) <= 0) { e.sayT = 5.5 + Math.random() * 3; world.fx('quip', e.pos, { say: pick(CHORES) }); }
+      } else if (e.st === 'crouch') {
+        e.cd -= dt;
+        body.scale.set(1.18, .72, 1.18);                            // the telegraph
+        if (e.cd <= 0) {
+          e.st = 'air'; e.vy = 12.5;
+          const m = Math.hypot(dx, dz) || 1;
+          // Lead the hop at the kid, but cap it: a boss that lands exactly on
+          // you every time is not a fight, it is a tax.
+          e.hx = (dx / m) * Math.min(7.5, m * 1.15);
+          e.hz = (dz / m) * Math.min(7.5, m * 1.15);
+          world.fx('bosshop', e.pos);
+        }
+      } else {
+        body.scale.set(.92, 1.12, .92);
+        e.vy -= 26 * dt;
+        e.pos.y += e.vy * dt;
+        e.pos.x += e.hx * dt * 1.2;
+        e.pos.z += e.hz * dt * 1.2;
+        if (e.pos.y <= e.home.y) {
+          e.pos.y = e.home.y; e.st = 'wait'; e.cd = e.hopGap;
+          world.fx('bossland', e.pos.clone());
+        }
+      }
+
+      // The arena leash. Clamped every frame, in flight as well as on landing,
+      // so a hop aimed past the wall lands against it instead of over it.
+      const ox = e.pos.x - e.home.x, oz = e.pos.z - e.home.z;
+      const r = Math.hypot(ox, oz);
+      if (r > e.arena) { e.pos.x = e.home.x + ox / r * e.arena; e.pos.z = e.home.z + oz / r * e.arena; }
+
+      // Flashing while invulnerable, so a hit that landed is visible.
+      e.mesh.visible = !(e.invT > 0) || Math.floor(e.invT * 20) % 2 === 0;
+    },
+    onHit: e => e.hp === 2 ? pick(HIT_1) : pick(HIT_2),
+    onDown: () => pick(DEFEAT),
   },
   // Hovers and bobs. Stompable, but it's moving in three dimensions.
   //

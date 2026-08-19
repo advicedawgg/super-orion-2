@@ -38,6 +38,12 @@ export const BODY = {
   jelly: { radius: .85, height: 1.7, range: 0, bob: 2.2 },
   zapdrone: { radius: .8, height: 1.2, range: 8, bob: .6 },
   flapjack: { radius: .7, height: 1.0, range: 5, bob: 1.4 },
+  // The boss. range/bob 0: he does not patrol a line, he hops at YOU, and the
+  // swept-patrol pass would otherwise sweep a circuit he never walks. What
+  // keeps him honest is `arena` (see the king in world.js), which clamps him to
+  // a radius around where he was placed — a boss that can leave the arena can
+  // fall out of it, and a dead-and-gone boss is a gate that never opens.
+  king: { radius: 1.15, height: 2.6, range: 0, bob: 0 },
 };
 
 /** Crate collider, derived in ONE place so the game and the checker agree. */
@@ -141,6 +147,21 @@ class Builder {
   portal(x, y, z, level) { this.o.portals.push({ x, y, z, level }); }
 
   enemy(kind, x, y, z, opt = {}) { this.o.enemies.push({ kind, x, y, z, opt }); }
+  /**
+   * The boss gate. A solid wall that CRUMBLES when the boss goes down, so the
+   * goal behind it is unreachable until then.
+   *
+   * Tagged `scenery` on purpose: that is the flag that says "collides, but is
+   * not a platform and is not the checker's business", which is exactly right
+   * for a wall that opens itself. The checker instead pairs it with the boss —
+   * a gate with no king never opens, and a king with no gate guards nothing.
+   */
+  gate(x, y, z, w, d, h) {
+    const s = this.box(x, y, z, w, d, h, 'metal');
+    s.scenery = true; s.gate = true;
+    this.o.gates.push(s);
+    return s;
+  }
   checkpoint(x, y, z) { this.o.checkpoints.push({ x, y, z }); }
   goal(x, y, z) { this.o.goal = { x, y, z }; }
   /**
@@ -160,7 +181,7 @@ class Builder {
 
 /** Run a level definition's build() and return its plain data. */
 export function buildLevel(def) {
-  const out = { solids: [], movers: [], stars: [], crates: [], enemies: [], checkpoints: [], goal: null, trees: [], ground: null, portals: [] };
+  const out = { solids: [], movers: [], stars: [], crates: [], enemies: [], checkpoints: [], goal: null, trees: [], ground: null, portals: [], gates: [] };
   def.build(new Builder(out));
   for (const c of out.crates) out.solids.push(crateSolid(c));
   for (const t of out.trees) if (t.solid) out.solids.push(trunkSolid(t));

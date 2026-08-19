@@ -1715,6 +1715,149 @@ export const LEVELS = [
     B.goal(0, 24, -646);
   },
 },
+
+{
+  id: 'castle', name: "King Dad's Castle", world: 2,
+  // Borrowed, like the cavern's. A boss fight wants its own track more than
+  // any other level in the game — see README → Next.
+  music: 'cosmic',
+  sky: [0x2e1550, 0xff9a5c], fog: [0xf08a62, 45, 200],
+  sun: 0xffd9a8, sunDir: [-0.45, 1, 0.5], amb: 0x3b2a4a,
+  camYaw: 0, camOff: [0, 5.8, 13], start: [0, 0, 14],
+  hint: 'The castle! Jump on King Dad THREE times — spinning just bounces off.',
+  build(B) {
+    // The finale. A normal running level for 250u, then one room with one
+    // problem in it. The run-up is deliberately gentle: everything the kid has
+    // to spend on this level should be spent in the arena.
+    B.ground(-16, 'water');
+
+    /* --- A: the causeway ------------------------------------------------- */
+    B.floor(0, 0, 4, 12, 24, 'rock');                         // z 16 .. -8
+    B.wall(-8.6, 2.4, 4, 4, 24, 2.4, 'rock');
+    B.wall(8.6, 2.4, 4, 4, 24, 2.4, 'rock');
+    B.starLine(0, 1.4, 10, 4, [0, 0, -2.2]);
+    B.crate(-3.6, 0, -1, 'plain');
+    B.crate(3.6, 0, -1, 'plain');
+
+    /* --- B: the outer ward ------------------------------------------------ */
+    B.floor(0, 0, -20, 12, 16, 'rock');                       // z -12 .. -28
+    B.enemy('grumblin', 0, 0, -20, { axis: 'x', range: 8 });
+    B.starLine(-3, 1.4, -17, 3, [3, 0, 0]);
+    B.crate(4, 0, -25, 'plain');
+
+    /* --- C: three broken steps over the sea -------------------------------- */
+    B.box(-3, 0.8, -34.5, 5, 5, 10, 'rock');                  // z -32 .. -37
+    B.box(3, 1.6, -43.5, 5, 5, 11, 'rock');                   // z -41 .. -46
+    B.box(-3, 2.4, -52.5, 5, 5, 12, 'rock');                  // z -50 .. -55
+    B.star(-3, 2.2, -34.5);
+    B.star(3, 3.0, -43.5);
+    B.star(-3, 3.8, -52.5);
+
+    /* --- D: the guardroom. Checkpoint 1 ------------------------------------ */
+    B.floor(0, 2.4, -66, 14, 14, 'rock');                     // z -59 .. -73
+    B.checkpoint(0, 2.4, -66);
+    B.crate(-4.2, 2.4, -66, 'star');
+    B.crate(4.2, 2.4, -66, 'plain');
+    B.enemy('prickle', 0, 2.4, -70, {});
+    B.starLine(-4, 3.8, -62, 5, [2, 0, 0]);
+
+    /* --- E: the moat. Two drawbridge sections, both moving ----------------- */
+    B.mover(-5, 2.4, -78, 6, 6, 2, [5, 2.4, -78], 5);         // z -75 .. -81
+    B.mover(5, 2.4, -88, 6, 6, 2, [-5, 2.4, -88], 6);         // z -85 .. -91
+    B.star(-5, 3.8, -78);
+    B.star(5, 3.8, -88);
+    B.starLine(0, 4.8, -83, 3, [0, 0, -1.2], 1.2);
+    B.floor(0, 2.4, -100, 12, 12, 'rock');                    // z -94 .. -106
+    B.enemy('grumblin', 0, 2.4, -100, { axis: 'x', range: 7 });
+    B.crate(0, 2.4, -103, 'life');
+
+    /* --- F: the battlements. Bats off the parapet -------------------------- */
+    B.floor(-4, 3.2, -116, 7, 12, 'rock');                    // z -110 .. -122
+    B.enemy('flapjack', -4, 6.4, -116, { axis: 'x', range: 6, bob: 1.3 });
+    B.starLine(-4, 4.6, -118, 3, [0, 0, -1.6]);
+    B.floor(4, 4.0, -132, 7, 12, 'rock');                     // z -126 .. -138
+    B.enemy('flapjack', 4, 7.2, -132, { axis: 'x', range: 6, bob: 1.3 });
+    B.starLine(4, 5.4, -134, 3, [0, 0, -1.6]);
+
+    /* --- G: the courtyard. Checkpoint 2 ------------------------------------ */
+    B.floor(0, 4.0, -150, 14, 16, 'rock');                    // z -142 .. -158
+    B.checkpoint(0, 4.0, -150);
+    B.enemy('grumblin', 0, 4.0, -146, { axis: 'x', range: 9 });
+    B.crateRow(-2.1, 4.0, -154, 3, 'plain');
+    B.starLine(-4, 5.4, -147, 5, [2, 0, 0]);
+
+    /* --- H: stepping stones across the inner moat -------------------------- */
+    B.box(-3, 4.0, -164, 4, 4, 14, 'rock');                   // z -162 .. -166
+    B.box(3, 4.0, -172, 4, 4, 14, 'rock');                    // z -170 .. -174
+    B.box(-3, 4.0, -180, 4, 4, 14, 'rock');                   // z -178 .. -182
+    B.star(-3, 5.4, -164);
+    B.star(3, 5.4, -172);
+    B.star(-3, 5.4, -180);
+
+    /* --- I: the turret landing --------------------------------------------- */
+    B.floor(0, 4.8, -192, 12, 12, 'rock');                    // z -186 .. -198
+    B.enemy('prickle', -3, 4.8, -190, {});
+    B.crate(3, 4.8, -190, 'star');
+    B.starLine(-4, 6.2, -195, 5, [2, 0, 0]);
+
+    /* --- J: the tower stair ------------------------------------------------ */
+    B.box(-4, 7.0, -205.5, 6, 7, 16, 'rock');                 // z -202 .. -209
+    B.box(4, 9.2, -216.5, 6, 7, 18, 'rock');                  // z -213 .. -220
+    B.box(0, 11.4, -227.5, 8, 7, 20, 'rock');                 // z -224 .. -231
+    B.star(-4, 8.4, -205.5);
+    B.star(4, 10.6, -216.5);
+    B.star(0, 12.8, -227.5);
+
+    /* --- K: the gatehouse. Last checkpoint before the fight ---------------- */
+    B.floor(0, 11.4, -242, 14, 14, 'rock');                   // z -235 .. -249
+    B.checkpoint(0, 11.4, -242);
+    // Two spare cats and a full pocket of stars, on purpose: the fight is the
+    // hard part of the level and the kid should arrive at it stocked.
+    B.crate(-4.4, 11.4, -239, 'life');
+    B.crate(4.4, 11.4, -239, 'life');
+    B.crate(0, 11.4, -246, 'star');
+    B.starLine(-4, 12.8, -243, 5, [2, 0, 0]);
+
+    /* --- L: THE ARENA ------------------------------------------------------
+     * One slab, 34 by 34, no pits and no crates in the middle. A boss who
+     * hops at you needs floor everywhere you might be standing, and anything
+     * you can hide behind turns the fight into a stalemate.
+     */
+    B.floor(0, 11.4, -270, 34, 34, 'rock');                   // z -253 .. -287
+    B.enemy('king', 0, 11.4, -272, { arena: 12 });
+
+    // Rails down both long sides, waist high — and the real barrier at 9u,
+    // because a double jump clears 4.08 and going over the side mid-fight is
+    // not a mistake worth a life. The entry side stays open: backing off the
+    // way you came in is a legitimate thing to do to a boss.
+    for (const sx of [-1, 1]) {
+      B.wall(sx * 17.8, 13.6, -270, 1.6, 34, 2.2, 'rock');
+      B.barrier(sx * 17.8, 20.4, -270, 1.6, 34, 9);
+    }
+    // Braziers in the corners. Scenery only — crystals recoloured by tint,
+    // which is what having a flora kind is for.
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      B.weed(sx * 14.5, 11.4, -270 + sz * 14.5, 1.3, 'crystal');
+    }
+    // Stars round the edge of the arena: a reason to move while he is winding
+    // up, instead of standing still waiting for the telegraph.
+    B.starLine(-12, 12.8, -258, 5, [6, 0, 0]);
+    B.starLine(-12, 12.8, -283, 5, [6, 0, 0]);
+    B.star(-15, 12.8, -270);
+    B.star(15, 12.8, -270);
+
+    /* --- M: the gate, and what is behind it -------------------------------- */
+    // Spans the whole width of the court beyond and stands 5u tall, so it can
+    // be neither walked round nor jumped (a double jump is 4.08). It crumbles
+    // when he goes down — that is the only way through.
+    B.gate(0, 16.4, -286.4, 16, 1.6, 5);
+    B.floor(0, 11.4, -294, 16, 14, 'rock');                   // z -287 .. -301
+    B.weed(-6.6, 11.4, -290, 1.5, 'crystal');
+    B.weed(6.6, 11.4, -290, 1.5, 'crystal');
+    B.starLine(-4, 12.8, -291, 5, [2, 0, 0]);
+    B.goal(0, 11.4, -296);
+  },
+},
 ];
 
 export const byId = id => LEVELS.find(l => l.id === id);
@@ -1736,7 +1879,10 @@ export const HUB = {
   music: 'jungle',
   sky: [0x4aa8ff, 0xdff1ff], fog: [0xd6ecff, 60, 210],
   sun: 0xfff4dd, sunDir: [-0.4, 1, 0.55], amb: 0x4e6a48,
-  camYaw: 0, camOff: [0, 7.0, 14], start: [0, 0, 8],
+  // Pulled back for the seventh door: at [0,7,14] the two ends of the arc ran
+  // off the sides of the screen, and a level select you have to walk around to
+  // read is not a level select.
+  camYaw: 0, camOff: [0, 8.6, 17], start: [0, 0, 9],
   hint: 'Walk into a ring to play that level!',
   build(B) {
     B.ground(-12, 'water');                         // the island sits in the sea
@@ -1745,16 +1891,17 @@ export const HUB = {
     // face across the bottom half of the screen.
     B.floor(0, 0, -3, 36, 48, 'grass');             // x -18..18, z -27 .. 21
 
-    // The six doorways, in an arc so none of them hides behind another and
-    // the camera — which is fixed — sees the whole set from the spawn. An even
-    // number has no middle, so the arc opens out around the centre line rather
-    // than putting a door on it.
-    B.portal(-16, 0, -3, 0);
-    B.portal(-10.5, 0, -9.5, 1);
-    B.portal(-3.6, 0, -13.5, 2);
-    B.portal(3.6, 0, -13.5, 3);
-    B.portal(10.5, 0, -9.5, 4);
-    B.portal(16, 0, -3, 5);
+    // The seven doorways, in an arc so none of them hides behind another and
+    // the camera — which is fixed — sees the whole set from the spawn. Depth
+    // does the separating as much as width: the middle doors sit further back,
+    // so perspective pulls their placards apart on screen.
+    B.portal(-14.5, 0, -4, 0);
+    B.portal(-10, 0, -9.5, 1);
+    B.portal(-5.2, 0, -13.5, 2);
+    B.portal(0, 0, -16, 3);
+    B.portal(5.2, 0, -13.5, 4);
+    B.portal(10, 0, -9.5, 5);
+    B.portal(14.5, 0, -4, 6);
 
     // Something to look at, and a reason the island reads as a place. All of
     // it is clear of the walking line between the spawn and the arc.

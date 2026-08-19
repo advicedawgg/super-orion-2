@@ -87,6 +87,47 @@ Two more passes it runs:
 
 **Never change the physics constants to fix a level.** Change the level.
 
+## The boss
+
+**King Dad's Castle** is the finale: 250u of castle, then one room with one problem in it. He takes
+**three stomps** (a ground pound counts), the spin bounces off him, and he telegraphs every hop with
+a crouch — that crouch is the whole fight, because it is what makes "get out from under him, then
+land on him" readable by a seven-year-old. Each hit shortens the gap between hops by a quarter.
+
+The gate behind him crumbles when he goes down, and the goal is behind the gate. Those two are one
+mechanism, so `tools/check.js` pairs them: a gate with no king never opens, a king with no gate
+guards nothing, and a king whose `arena` circle isn't covered by a single floor can hop into the sea
+and take the gate with him. The fight itself is the part the checker can't prove — that one needs a
+browser and a kid.
+
+## Funny stuff
+
+Typed words, anywhere in the game, the way game 1 did them:
+
+| Type | What happens |
+|---|---|
+| `sootie` | +3 lives |
+| `shiny` | +10 stars |
+| `egg` | +25 stars |
+| `love` | hearts refilled |
+| `daddy` | a dad joke, with a rimshot |
+| `toot` | he is seven |
+
+**The trap has two halves, and both of them shipped.** A cheat's letters are still live game keys:
+
+1. A word spelled entirely from movement letters **fires itself**. The dad joke was `dad` — d-a-d,
+   which is just running right, left, right, so it went off every few seconds all game.
+2. A word containing **P, R, M or F** pauses, restarts, mutes or goes fullscreen mid-word. The star
+   cheat was `star`; the R threw you back to the checkpoint every time you used it. (Game 1 lost
+   `mum` the same way — two Ms toggle mute twice.)
+
+`In.cheat()` now throws at boot on either, so a bad word can't ship again. It is why the fart is
+spelled `toot`.
+
+King Dad's own material is chores, not menace: he spends the fight telling you to do your homework,
+brush your teeth and turn that light off. Keep it that way — the joke is that the final boss is
+bedtime.
+
 ## Assets
 
 **Music** is generated locally by **MiniMax Music 3** through ComfyUI:
@@ -135,8 +176,8 @@ and has to be downloaded.
 **Live at [orion2.advicedawg.com](https://orion2.advicedawg.com)**, and fronted by the launcher menu at
 [orion.advicedawg.com](https://orion.advicedawg.com).
 
-Playable end to end: a **hub island** you pick levels from, **6 levels across 2 worlds, 1,003 collectable
-stars**, 4 crate types, 5 enemy types, moving platforms, checkpoints, lives,
+Playable end to end: a **hub island** you pick levels from, **7 levels across 2 worlds, 1,089 collectable
+stars**, 4 crate types, 6 enemy types including a **boss**, moving platforms, checkpoints, lives,
 spin/ground-pound/double-jump, **swimming and a jetpack**, generated textures and a full generated
 soundtrack with real loop points.
 
@@ -152,8 +193,9 @@ Running out of lives puts you back on the map rather than ending a run.
 | 4 | Crystal Cavern | 581u | 159 | |
 | 5 | Sunken Reef | 616u | 155 | **swim** |
 | 6 | Cosmic Cannonball | 649u | 181 | **jetpack** |
+| 7 | King Dad's Castle | 298u | 86 | **boss** |
 
-That is 3,735 units of level, up from 358.
+That is 4,033 units of level, up from 358.
 
 Crystal Cavern (2026-08-19) went in at 4 rather than on the end: the reef and the flight level are both
 free-movement levels, so back to back they left the game with no plain running level in World 2. It also
@@ -175,8 +217,8 @@ What is worth doing next, in rough priority order:
    reasoned rather than heard — an audio model was tried and failed its control (`AGENTS.local.md`).
    `frost.mp3` was re-rolled on 2026-08-16 (seed 4410, cfg 2.6) after three takes that sang; it now
    measures cleaner than any other track in the game, but nobody has heard the new one yet.
-4. **Generate `cavern.mp3`.** The new level borrows the flight level's track. `node tools/genmusic.js
-   cavern` once ComfyUI is up, then `tools/looppoints.js`, then drop the `music: 'cosmic'` line from the
-   level def.
+4. **Generate `cavern.mp3` and `castle.mp3`.** Two levels now borrow the flight level's track, and a boss fight wants its own more than any other level in the game. The new level borrows the flight level's track. `node tools/genmusic.js
+   `node tools/genmusic.js cavern` once ComfyUI is up, then `tools/looppoints.js`, then drop the
+   `music: 'cosmic'` line from each level def.
 5. Backdrop trees are the mesh budget: Jungle Jog draws ~1470 meshes against ~800 for the others.
    Fine on a desktop GPU, and it is the first thing to instance if the Steam Deck struggles.
