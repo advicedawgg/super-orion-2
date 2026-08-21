@@ -207,6 +207,19 @@ you in is `B.barrier()` at 9u — a collider with no mesh, using the same `scene
 trunks already use, so world.js skips drawing it and check.js skips treating it as a
 platform. Raising the *visible* rail that high would wall the sea out instead.
 
+## Two things the gate learned from a playtest
+
+Both were reported by the kid, both were invisible in the diff, and both are now
+`check.js` failures rather than notes in this file:
+
+- **A prop within jumping reach.** See `B.prop()` below. Scenery with no collider is
+  correct until the player can reach it, and then it is a hole in the world.
+- **An enemy standing on a checkpoint.** You have to touch a checkpoint to take it
+  (`near(..., 1.8, 3.2)` in world.js), so anything parked on one is damage you cannot
+  avoid. A prickle shipped at the *identical coordinate* as checkpoint 5 on the moon —
+  and the same pass found a grumblin patrolling across checkpoint 3 in Crystal Cavern,
+  which had been there since the level was written.
+
 ## Crate kinds
 
 `CRATE` in `src/world.js` is the behaviour and the art; `CRATE_STARS` in
@@ -280,7 +293,14 @@ Levels are `build(B)` functions in `src/levels.js` run against the Builder.
   ice pads were doing before they were an ice rink in a space station.
 - Trees are **solid by default** (you can't walk through a trunk you're standing beside).
   Backdrop trees must pass `solid = false`, or a falling player lands on one instead of dying.
-- **`B.prop()` is a box you can see and cannot touch** — a distant mesa, a moon boulder,
+- **`B.prop()` is a box you can see and cannot touch** — and `check.js` now FAILS any
+  prop the player can land on, because the prose rule below was not enough. A moon
+  lander parked 2.5u off the starting platform shipped and a seven-year-old jumped on
+  it and fell straight through, in the one level where a jump covers 8.8u. Distance is
+  the only thing that keeps scenery scenery: the same pass moved lunar's backdrop
+  boulders from x ±34 to ±50, because a fall from the corridor toward something 25u
+  below covers ~22u of ground in that gravity. If you want the thing standable, it is
+  a `wall()`, not a prop — and a moon lander you can climb is the better game anyway. — a distant mesa, a moon boulder,
   a lander. It is not a `wall()` because a wall is a platform and the checker would then
   have to prove you can reach the top of a butte 200u off the path; it is not a
   `barrier()` because that is the opposite problem, a collider with no mesh. **Keep props
@@ -575,6 +595,35 @@ answers this question reliably. **A human is still the only judge of whether a t
 good** — that part stands.
 
 ### Loop points
+
+**A seam that STEPS in loudness is the one thing neither score can see.** The spectral
+score compares unit-normalised frames, so it is deaf to level by construction; the
+waveform correlation is a phase match. A loop can therefore score beautifully and still
+leave the top of a crescendo to land on a quiet bar. Dunes shipped doing exactly that —
+out at −9.9 dB, back in at −15.5 — and the kid heard it immediately: *"the loop is
+during a crescendo and walking bass section"*. `searchGrid` results are now filtered on
+the level step (`MAX_STEP`, 2.5 dB, `LOOP_MAX_STEP` to relax), and ties on length are
+broken by the quieter seam.
+
+Two things that came out of fixing it, both worth keeping:
+
+- **`--after=<sec>` keeps the loop out of the front of the track.** Dunes wanted the
+  crescendo to be intro material heard once, not a thing it climbed every 30 seconds.
+  The fix was `--after=64`, which found the settled section at 64.4–87.8s with the best
+  waveform alignment the track has had (0.293 against 0.181).
+- **`--hint` re-snaps to the top candidate's grid phase**, which is often NOT the phase
+  the hinted candidate wants — hinting the same bars the search found scored 0.043 where
+  the search itself got 0.141. Prefer `--after` when you want a region; keep `--hint`
+  for when you know the exact bars.
+
+**Measuring is not the same as hearing.** The level-step pass flagged six of eleven
+tracks; the human said only dunes was actually objectionable, and he was right — a 4 dB
+step inside a busy mix is masked, a 5.6 dB step out of a crescendo into a quiet bar is
+not. So a bare `node tools/looppoints.js` now recuts only tracks with NO loop points
+yet, and needs a name or `--redo` to touch one that already has them. The points in
+`src/music.js` have been listened to; do not let a tool change quietly churn them.
+
+### Loop points, mechanically
 
 `<audio loop>` can only restart from zero, which sounds like the CD skipped. Real game music
 is intro-then-loop, so tracks go through WebAudio with native `loopStart`/`loopEnd`:

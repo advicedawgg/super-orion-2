@@ -238,6 +238,51 @@ for (const def of [...LEVELS, HUB]) {
     fail(`hub has ${(d.portals || []).length} portals for ${LEVELS.length} levels`);
   for (const c of d.checkpoints)
     if (!canLand(c, 2.8, H1 + 2, 3)) fail(`checkpoint at z=${c.z.toFixed(0)} is unreachable`);
+
+  /* ---- a prop you can land on ----
+   * B.prop() draws a box and gives it NO collider, which is the whole point —
+   * a distant mesa must not be a platform the gate has to prove you can climb.
+   * The failure mode is the mirror image: put one within reach and the player
+   * jumps onto something solid-looking and drops straight through it.
+   *
+   * Reported from a real playtest — a moon lander parked 2.5u off the starting
+   * platform, in the one level where a jump covers 8.8u. The rule in AGENTS.md
+   * said "keep props off the corridor" and a rule that is only in prose is a
+   * rule that gets broken.
+   */
+  for (const pr of d.props || []) {
+    const r = rect(pr);
+    let ratio = Infinity;
+    for (const pl of reached) for (const f of footprints(pl)) {
+      const dy = pr.y - f.top;
+      // Free modes climb without limit, so an arc says nothing there; anything
+      // near the play space is reachable by definition.
+      if (free) { ratio = Math.min(ratio, gap(f.r, r) / 10); continue; }
+      const v = launchV(pl);
+      const reachable = Math.max(reach(dy, v), reach(dy, v, true));
+      if (reachable > 0) ratio = Math.min(ratio, gap(f.r, r) / reachable);
+    }
+    if (ratio <= 1)
+      fail(`prop at (${pr.x},${pr.y},${pr.z}) is within jumping reach — the player will land on it `
+        + `and fall through. Move it out of reach, or use wall() so it is solid.`);
+  }
+
+  /* ---- something standing on a checkpoint ----
+   * You have to touch a checkpoint to take it (world.js: near(..., 1.8, 3.2)),
+   * so anything parked on one is damage you cannot avoid. A prickle is the
+   * worst case — it cannot be stomped or spun — and that is exactly what got
+   * shipped on the moon, at the identical coordinate.
+   */
+  for (const [what, at] of [...d.checkpoints.map(c => ['checkpoint', c]),
+                            ...(d.goal ? [['goal', d.goal]] : [])]) {
+    for (const e of d.enemies) {
+      const b = BODY[e.kind];
+      if (!b || e.hp) continue;                       // the boss owns his arena
+      if (Math.hypot(e.x - at.x, e.z - at.z) > b.radius + 1.5) continue;
+      if (Math.abs(e.y - at.y) > 2.5) continue;
+      fail(`${e.kind} at (${e.x},${e.y},${e.z}) is sitting on the ${what} — you cannot take it without being hit`);
+    }
+  }
   // Crates ARE platforms, so reachability is exact — no modelling needed.
   const badCrates = d.crates.filter(c => !reached.has(plats.find(p => p.s.crate === c)));
   if (badCrates.length) fail(`${badCrates.length} crate(s) unreachable, e.g. ${badCrates.slice(0, 3).map(c => `(${c.x.toFixed(0)},${c.y.toFixed(1)},${c.z.toFixed(0)})`).join(' ')}`);

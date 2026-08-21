@@ -27,8 +27,8 @@ export const LOOPS = {
     "loopEnd": 91.3093
   },
   "dunes": {
-    "loopStart": 28.0729,
-    "loopEnd": 57.8101
+    "loopStart": 64.3889,
+    "loopEnd": 87.8393
   },
   "cavern": {
     "loopStart": 15.0233,

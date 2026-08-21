@@ -25,6 +25,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { TRACKS } from './genmusic.js';
 
@@ -167,6 +168,22 @@ function chooseBeat(flux, hintBpm) {
   return best;
 }
 
+/* --------------------------------------------------------------- loudness */
+// Per-frame RMS in dB. `features()` normalises every frame to unit length, so
+// by design it cannot tell loud from quiet — which is exactly the thing a
+// listener notices at a bad seam.
+function levels(pcm) {
+  const n = Math.floor((pcm.length - WIN) / HOP);
+  const out = new Float32Array(n);
+  for (let f = 0; f < n; f++) {
+    const off = f * HOP;
+    let e = 0;
+    for (let i = 0; i < WIN; i++) { const x = pcm[off + i]; e += x * x; }
+    out[f] = 20 * Math.log10(Math.sqrt(e / WIN) + 1e-9);
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------ loop search */
 // Score how alike the music AROUND `a` is to the music AROUND `b`. If they
 // match, the jump from b back to a is inaudible — what plays next is what
@@ -250,9 +267,28 @@ const argv = process.argv.slice(2);
 const preview = argv.includes('--preview');
 const names = argv.filter(a => !a.startsWith('--'));
 const dir = path.join(ROOT, 'assets', 'audio');
+// With no names, do only the tracks that have NO loop points yet.
+//
+// A blanket re-run used to recompute all of them, which is dangerous now that
+// the search has changed: the loop points in src/music.js have been listened to
+// and approved, and the tool has no way to know that. Re-cutting a track nobody
+// complained about is churn at best and a regression at worst — the level-step
+// term added on 2026-08-21 would have moved five tracks the user then said were
+// fine. Name a track (or pass --redo) to change one on purpose.
+const existing = new Set(Object.keys(await (async () => {
+  try { return (await import(`file://${path.join(ROOT, 'src', 'music.js').replace(/\\/g, '/')}?t=${Date.now()}`)).LOOPS; }
+  catch { return {}; }
+})()));
+const onDisk = fs.readdirSync(dir).filter(f => f.endsWith('.mp3')).map(f => f.replace(/\.mp3$/, ''));
 const list = names.length
   ? names
-  : fs.readdirSync(dir).filter(f => f.endsWith('.mp3')).map(f => f.replace(/\.mp3$/, ''));
+  : (argv.includes('--redo') ? onDisk : onDisk.filter(n => !existing.has(n)));
+if (!names.length && !argv.includes('--redo')) {
+  const skipped = onDisk.filter(n => existing.has(n));
+  if (skipped.length)
+    console.log(`skipping ${skipped.length} track(s) that already have approved loop points: `
+      + `${skipped.join(', ')}\n(name one, or pass --redo, to recut it)`);
+}
 
 // Seed from what's already there. Running on one track must not silently drop
 // every other track's loop points out of the generated file.
@@ -273,18 +309,63 @@ for (const name of list) {
   const hint = Number((TRACKS[name]?.caption || '').match(/(\d+(?:\.\d+)?)\s*BPM/i)?.[1]) || 0;
 
   const tempo = chooseBeat(flux, hint);
-  const all = tempo ? searchGrid(feats, flux, tempo.beat) : [];
+  let all = tempo ? searchGrid(feats, flux, tempo.beat) : [];
+  // --after=<sec> keeps the loop out of the first part of the track. For when
+  // the intro is the good bit and you want it heard once, not every 30s.
+  const afterArg = argv.find(a => a.startsWith('--after='));
+  if (afterArg) {
+    const t = Number(afterArg.slice(8));
+    const kept = all.filter(c => c.s / FPS >= t);
+    if (kept.length) all = kept;
+    else console.log(`  ! nothing loops after ${t}s — ignoring --after`);
+  }
   if (!all.length) { console.log(`${name}: too short to loop (${dur.toFixed(1)}s)`); continue; }
 
   // Pick the LONGEST loop whose match is within a hair of the best, not the
   // single best match. The tightest match is usually a short loop inside one
   // repeated section; for a game you want the loop to use as much of the track
   // as possible so the kid hears the repeat as rarely as possible.
-  const top = all.reduce((a, b) => (b.score > a.score ? b : a));
+  // THE LOUDNESS STEP. Neither of the two scores above can see it: the spectral
+  // score compares unit-normalised frames, so it is deaf to level by
+  // construction, and the waveform correlation is a phase match. A loop can
+  // therefore score beautifully and still leave the top of a crescendo to land
+  // on a quiet bar, which is what a listener hears as "it jumps".
+  //
+  // Found on dunes, reported by ear: the loop left at -9.9 dB and arrived at
+  // -15.5 dB. Measuring the other ten found five more doing the same thing,
+  // reef by +5.5 dB. It was never a dunes problem; it was a missing term.
+  const lvl = levels(pcm);
+  const meanLvl = (from, to) => {
+    let s = 0, n = 0;
+    for (let f = Math.max(0, Math.round(from)); f < Math.min(lvl.length, Math.round(to)); f++) { s += lvl[f]; n++; }
+    return n ? s / n : 0;
+  };
+  // What you hear arriving, minus what you heard leaving.
+  const stepOf = c => meanLvl(c.s, c.s + c.bar) - meanLvl(c.e - c.bar, c.e);
+  // dB. 2.5 is about a third of a fader move — below where a step reads as
+  // "it jumped" rather than "the music changed". LOOP_MAX_STEP relaxes it when
+  // the only level seam in a track costs you most of the track: a loop that
+  // uses 19s of an 82s render means the kid never hears two thirds of it, and
+  // that can be the worse bargain.
+  const MAX_STEP = Number(process.env.LOOP_MAX_STEP || 2.5);
+  const levelled = all.filter(c => Math.abs(stepOf(c)) <= MAX_STEP);
+  const pool = levelled.length ? levelled : all;
+  if (!levelled.length)
+    console.log(`  ! no loop in this track joins without a ${MAX_STEP} dB level step — taking the best anyway`);
+
+  const top = pool.reduce((a, b) => (b.score > a.score ? b : a));
   const TOL = 0.006;
-  let best = all
+  // Longest first, as before — a game wants the repeat to come round as rarely
+  // as possible. Then, among equal-length candidates, the QUIETEST seam: they
+  // are the same length and the same timbre match, so the only thing left to
+  // separate them is whether the join steps, and several ties differ by 2 dB.
+  let best = pool
     .filter(c => c.score >= top.score - TOL)
-    .reduce((a, b) => ((b.e - b.s) > (a.e - a.s) ? b : a));
+    .reduce((a, b) => {
+      const la = a.e - a.s, lb = b.e - b.s;
+      if (lb !== la) return lb > la ? b : a;
+      return Math.abs(stepOf(b)) < Math.abs(stepOf(a)) ? b : a;
+    });
 
   // --hint s,e overrides the search. The spectral score is a timbre match; it
   // reliably finds a track's shortest repeat period, which is not the same
@@ -308,10 +389,11 @@ for (const name of list) {
 
   if (argv.includes('--top')) {
     console.log(`  candidates within ${TOL} of best (${top.score.toFixed(4)}), longest first:`);
-    for (const c of all.filter(x => x.score >= top.score - TOL)
-      .sort((a, b) => (b.e - b.s) - (a.e - a.s)).slice(0, 6))
+    for (const c of pool.filter(x => x.score >= top.score - TOL)
+      .sort((a, b) => (b.e - b.s) - (a.e - a.s)).slice(0, 8))
       console.log(`    ${(c.s / FPS).toFixed(1)}s → ${(c.e / FPS).toFixed(1)}s  `
-        + `(${((c.e - c.s) / FPS).toFixed(1)}s, ${c.score.toFixed(4)}, ${(60 * FPS / c.beat).toFixed(0)} BPM)`);
+        + `(${((c.e - c.s) / FPS).toFixed(1)}s, score ${c.score.toFixed(4)}, `
+        + `step ${stepOf(c) >= 0 ? '+' : ''}${stepOf(c).toFixed(1)} dB)`);
   }
 
   const beatSec = best.beat / FPS;
@@ -324,11 +406,14 @@ for (const name of list) {
     + `(asked ${hint || '?'}) · bar ${(beatSec * BEATS_PER_BAR).toFixed(2)}s`);
   console.log(`  intro 0–${loopStart}s · loop ${loopStart}–${loopEnd}s `
     + `(${(loopEnd - loopStart).toFixed(1)}s) · spectral ${best.score.toFixed(4)} · `
-    + `waveform ${fine.corr.toFixed(3)} after ${fine.shiftMs.toFixed(0)}ms nudge`);
+    + `waveform ${fine.corr.toFixed(3)} after ${fine.shiftMs.toFixed(0)}ms nudge · `
+    + `level step ${stepOf(best) >= 0 ? '+' : ''}${stepOf(best).toFixed(1)} dB`);
 
   if (preview) {
     const lead = Math.min(12, loopStart);
-    const out = `D:/dev/_scratch/${name}-loop-test.mp3`;
+    // A temp dir, not a hardcoded drive letter: this tool used to only ever run
+    // on the one Windows box with the GPU, and now it runs wherever ffmpeg is.
+    const out = path.join(process.env.LOOP_PREVIEW_DIR || os.tmpdir(), `${name}-loop-test.mp3`);
     // tail-into-seam, one full loop (second seam), then a little of the body.
     execFileSync('ffmpeg', ['-y', '-v', 'error', '-i', file, '-filter_complex',
       `[0:a]asplit=3[x][y][z];`

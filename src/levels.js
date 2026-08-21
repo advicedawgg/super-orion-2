@@ -1013,7 +1013,7 @@ export const LEVELS = [
     /* --- K: down onto the shelf. Checkpoint 3 ----------------------------- */
     B.floor(0, 8.0, -267, 12, 14, 'rock');                   // z -260 .. -274
     B.checkpoint(0, 8.0, -267);
-    B.enemy('grumblin', 0, 8.0, -267, { axis: 'x', range: 8 });
+    B.enemy('grumblin', 0, 8.0, -271, { axis: 'x', range: 8 });   // off the checkpoint
     B.weed(-5.6, 8.0, -263, 1.3, 'crystal');
     B.starLine(-4, 9.4, -271, 5, [2, 0, 0]);
 
@@ -2022,10 +2022,15 @@ export const LEVELS = [
 
     // Boulders and crater rims, well off the corridor. Props: nothing here is
     // a platform and the checker should not have to prove it.
+    // Pushed out to x +-50. At x +-34 the checker failed every one of them:
+    // a fall from the corridor toward a boulder 25u below covers ~22u of
+    // ground in this gravity, so they were all landable — and landing on a
+    // prop means dropping through it. Distance is the only thing keeping
+    // scenery scenery.
     for (let z = 18; z > -640; z -= 38) {
       const h = 6 + ((Math.abs(z) * 5) % 13);
-      B.prop(-34 + (z % 7), -20 + h, z, 14, 16, h, 'rock');
-      B.prop(38 + (z % 5), -20 + h * .7, z - 18, 16, 14, h * .7, 'rock');
+      B.prop(-50 + (z % 7), -20 + h, z, 14, 16, h, 'rock');
+      B.prop(54 + (z % 5), -20 + h * .7, z - 18, 16, 14, h * .7, 'rock');
     }
     // Glow on the dust below, so the drop reads as a place rather than a hole.
     for (let z = 14; z > -640; z -= 30) {
@@ -2038,11 +2043,18 @@ export const LEVELS = [
     B.starLine(0, 1.4, 10, 5, [0, 0, -2.4]);
     // The lander. A prop, because a kid WILL try to climb it and there is
     // nothing up there — better it be scenery than a disappointment.
+    // SOLID, not a prop. It stands 2.5u off the starting platform and a moon
+    // jump covers 8.8u, so a kid was always going to land on it — and a prop
+    // has no collider, so he fell straight through. Reported from a playtest,
+    // and now `tools/check.js` fails any prop within reach rather than trusting
+    // a note in AGENTS.md. Being able to climb the lander is the better game
+    // anyway.
+    //
     // `deck`, not `metal`: metal under this level's dim blue sun renders as a
     // black cube, and a black cube in the corner of the frame reads as a hole
     // in the world rather than as a spacecraft.
-    B.prop(-12, 3.4, 8, 5, 5, 3.4, 'deck');
-    B.prop(-12, 4.6, 8, 1.6, 1.6, 1.2, 'metal');
+    B.wall(-12, 3.4, 8, 5, 5, 3.4, 'deck');
+    B.wall(-12, 4.6, 8, 1.6, 1.6, 1.2, 'metal');
     B.weed(6.2, 0, 6, 1.3, 'crystal');
     B.weed(-6.2, 0, -6, 1.1, 'crystal');
     // The first thing you meet is a hopper, on a wide floor, on its own. It
@@ -2200,8 +2212,8 @@ export const LEVELS = [
     B.checkpoint(0, 13.8, -452);
     B.enemy('zapdrone', 0, 17.6, -448, { axis: 'x', range: 11 });
     B.enemy('hopper', 0, 13.8, -457, { axis: 'x', range: 8 });
-    B.prop(-13, 18.8, -452, 6, 6, 5, 'deck');                // the dish, off-corridor
-    B.prop(-13, 20.4, -452, 2.4, 2.4, 1.6, 'metal');
+    B.wall(-13, 18.8, -452, 6, 6, 5, 'deck');                // solid — see the lander
+    B.wall(-13, 20.4, -452, 2.4, 2.4, 1.6, 'metal');
     B.crate(-6.2, 13.8, -446, 'star');
     B.crate(6.2, 13.8, -446, 'plain');
     B.starLine(-5, 15.2, -452, 6, [2, 0, 0]);
@@ -2228,7 +2240,7 @@ export const LEVELS = [
     B.checkpoint(0, 18.6, -528);
     B.enemy('hopper', -5, 18.6, -523, { axis: 'x', range: 6 });
     B.enemy('hopper', 5, 18.6, -533, { axis: 'x', range: 6 });
-    B.enemy('prickle', 0, 18.6, -528, {});
+    B.enemy('prickle', 0, 18.6, -534, {});     // NOT on the checkpoint at -528
     B.crate(-6.4, 18.6, -536, 'iron');
     B.crate(6.4, 18.6, -536, 'iron');
     B.weed(-7.2, 18.6, -520, 2.0, 'crystal');

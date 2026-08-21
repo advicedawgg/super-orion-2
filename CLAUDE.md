@@ -98,6 +98,14 @@ Two real bugs fixed on the way, both worth knowing about:
 **Jellyfish bounce.** Land on the bell and you spring off it; the tentacles still sting. See
 AGENTS.md → Enemies for the invulnerability window that makes it work.
 
+**Playtest fixes (2026-08-21).** Two bug classes the kid found are now gate failures:
+a `B.prop()` within jumping reach (no collider — he landed on the moon lander and fell
+through it), and an enemy standing on a checkpoint (unavoidable damage; a prickle was at
+the identical coordinate as one, and the same pass found a grumblin that had been sitting
+on a Crystal Cavern checkpoint since it was written). `tools/looppoints.js` also scores
+the **loudness step** across a seam now — dunes looped out of a crescendo, which neither
+the spectral nor the waveform score can see. See AGENTS.md.
+
 The boss is the one thing in the repo the gate cannot fully prove — `tools/check.js` pairs the
 king with his gate and proves his arena, but the fight itself needs a browser. See AGENTS.md →
 The boss.
