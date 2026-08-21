@@ -18,6 +18,8 @@ export const T = {
   PW: 0.78, PH: 1.45, PD: 0.78,
   SPIN_TIME: 0.40, SPIN_R: 1.5, SPIN_CD: 0.45,
   STOMP_V: -34,
+  BOUNCE: 14.1,        // the pop off something you landed on — 0.82 of a jump
+
   MAX_SUBSTEP: 0.35,   // never advance more than this per collision pass
 };
 
@@ -47,11 +49,29 @@ export const MAX_RISE = (T.JUMP_V * T.JUMP_V) / (2 * T.GRAV);  // ~2.39u
 // on, not to make traversal a resource-management puzzle.
 export const MODES = {
   normal: {},
+  // The moon. NOT a free mode: every verb the kid already has — jump, double
+  // jump, spin, ground pound — still works and still means the same thing.
+  // Only the numbers move, so this is the one new mode that needs no new
+  // controls explained, and the checker judges it by its own arc for free
+  // (`tuning(def.mode)` feeds arcs() in tools/check.js).
+  //
+  // The feel to aim for is HANG TIME, not height: a jump that goes about 25%
+  // higher but takes twice as long to come down. Cutting GRAV alone gives you
+  // a moon you cannot land on anything from, so JUMP_V comes down with it.
+  moon: {
+    GRAV: 26, MAXFALL: 30, JUMP_V: 12.5, JUMP2_V: 10.5,
+    SPEED: 9.2, ACCEL: 58, FRICTION: 40, AIR_CTRL: 0.75,
+    BOUNCE: 10.4,                     // same 0.82 of a jump, in moon money
+  },
   swim: {
     GRAV: 11, MAXFALL: 6.5, JUMP_V: 8.6, SPEED: 7.8,
     ACCEL: 46, FRICTION: 34, AIR_CTRL: 1, CUT: 1,
     STROKE: true,                     // press = one stroke
     STROKE_COST: 0.125, REFILL: 0.4,  // 8 strokes a lungful; ~2.5s on the bottom
+    // A bounce off a jellyfish bell. Worth more than a stroke — otherwise
+    // landing on one is a punishment for aiming — and it costs no air, which
+    // is what makes a line of them a route rather than an obstacle.
+    BOUNCE: 11.2,
   },
   jet: {
     GRAV: 24, MAXFALL: 20, SPEED: 12,
@@ -301,6 +321,37 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('physics.js'))
   jp.grounded = true;
   for (let i = 0; i < 300; i++) tankStep(jp, 1 / 60, jet);
   ok('a perch refuels it', jp.tank === 1 && thrustStep(jp, 1 / 60, true, jet) === true);
+
+  /* --- bouncing off things --- */
+  // Every mode needs one, because Player.bounce() defaults to it and a mode
+  // without it bounces you at `undefined`. Normal mode's value is the one the
+  // game shipped with (0.82 of a jump) and must not move — every stomp the kid
+  // has already learned is that height.
+  ok('normal BOUNCE is unchanged at 0.82 of a jump', Math.abs(T.BOUNCE - T.JUMP_V * 0.82) < 0.02);
+  for (const name of Object.keys(MODES)) {
+    const m = tuning(name);
+    ok(`${name} bounce ${m.BOUNCE} is worth less than a jump and more than half of one`,
+      Number.isFinite(m.BOUNCE) && m.BOUNCE < m.JUMP_V * 1.35 && m.BOUNCE > m.JUMP_V * 0.6);
+  }
+
+  /* --- the moon --- */
+  // It has to stay the RUNNING game: two jumps and no more, both windows
+  // consumed, ground pound still legal. Only floatier.
+  const mn = tuning('moon');
+  ok('moon is not a free mode', !isFreeMode(mn) && !hasTank(mn));
+  ev = run(90, i => i === 0 || i === 20, () => true, mn);
+  ok(`moon keeps jump + jump2 and nothing more (got ${ev.map(e => e[1]).join(',')})`,
+    ev.length === 2 && ev[0][1] === 'jump' && ev[1][1] === 'jump2');
+  const mRise = mn.JUMP_V ** 2 / (2 * mn.GRAV), mBoth = mRise + mn.JUMP2_V ** 2 / (2 * mn.GRAV);
+  ok(`moon single jump ${mRise.toFixed(2)}u clears a 2.4u step the running game can only just make`,
+    mRise > MAX_RISE && mRise < MAX_RISE * 1.4);
+  // Hang time, not a rocket: the whole point is that you are in the air longer,
+  // not that you leave the level.
+  ok(`moon hang time ${(2 * mn.JUMP_V / mn.GRAV).toFixed(2)}s is ~2x the running game`,
+    2 * mn.JUMP_V / mn.GRAV > 2 * (T.JUMP_V / T.GRAV) * 1.6);
+  ok('moon still has a tank pinned full', (() => {
+    const m = mk(); m.grounded = false; m.tank = 0; tankStep(m, 1 / 60, mn); return m.tank === 1;
+  })());
 
   // Running mode must be untouched by any of this.
   const land = mk(); land.grounded = false; land.tank = 0;

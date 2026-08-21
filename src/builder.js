@@ -7,6 +7,20 @@
 export const CRATE_SIZE = 1.8;
 
 /**
+ * What each crate kind is WORTH. Here, in the pure module, because both
+ * src/world.js (which pays it out) and tools/check.js (which counts a level's
+ * total) need the same number — and for two years they each had their own
+ * copy, so a new kind was worth 5 stars in the game and 0 in the gate.
+ *
+ * `tnt` is worth nothing itself: it pays out by taking its neighbours with it.
+ */
+export const CRATE_STARS = { plain: 1, star: 5, iron: 3, life: 0, heart: 0, spring: 0, tnt: 0 };
+
+/** How far a tnt crate reaches. The game blows crates up with it and the
+ *  checker uses it to refuse a fuse it cannot see the point of. */
+export const TNT_R = 4.6;
+
+/**
  * Enemy kinds that hover instead of standing on something. Lives here, in the
  * pure module, because tools/check.js fails a ground enemy placed in mid-air
  * and must not fail a jellyfish for the same reason. world.js owns how they
@@ -20,7 +34,7 @@ export const FLOATING = new Set(['flapjack', 'jelly', 'zapdrone']);
  * is why `tree()` refuses to make them solid. Here, in the pure module, so the
  * checker can reject a typo'd kind instead of the game drawing nothing.
  */
-export const FLORA = new Set(['pine', 'kelp', 'coral', 'fan', 'crystal']);
+export const FLORA = new Set(['pine', 'kelp', 'coral', 'fan', 'crystal', 'cactus', 'shrub']);
 
 /**
  * How big each enemy is and how far it moves when the level doesn't say.
@@ -34,6 +48,14 @@ export const FLORA = new Set(['pine', 'kelp', 'coral', 'fan', 'crystal']);
  */
 export const BODY = {
   grumblin: { radius: .75, height: 1.2, range: 6, bob: 0 },
+  // A grumblin in a hard hat: the stomp bounces off the helmet, so this one
+  // is the level teaching you the X button. Taller than a grumblin by the
+  // height of the hat, which is the whole reason you can't land on it.
+  hardhat: { radius: .78, height: 1.45, range: 6, bob: 0 },
+  // Hops on the spot instead of walking. `bob` is its hop height, which the
+  // swept-patrol pass reads as vertical travel — the same field a jellyfish
+  // uses, because to the checker "moves up and down" is one question.
+  hopper: { radius: .7, height: 1.05, range: 4, bob: 1.6 },
   prickle: { radius: .8, height: 1.0, range: 0, bob: 0 },
   jelly: { radius: .85, height: 1.7, range: 0, bob: 2.2 },
   zapdrone: { radius: .8, height: 1.2, range: 8, bob: .6 },
@@ -146,6 +168,30 @@ class Builder {
   /** A doorway into level `level` (an index into LEVELS). Hub world only. */
   portal(x, y, z, level) { this.o.portals.push({ x, y, z, level }); }
 
+  /**
+   * A box you can SEE and cannot touch: a distant mesa, a moon boulder, the
+   * spire of a tower off the side of the corridor.
+   *
+   * It is not a `wall()` because a wall is a platform — the checker would then
+   * have to prove you can reach the top of a butte 200u off the path, and the
+   * honest answer is that you should not be able to get near it. It is not a
+   * `barrier()` either: that has the opposite problem, a collider with no mesh.
+   *
+   * Rule: keep props OFF the corridor. `keepOrionInSight` only ghosts things in
+   * `solids`, so a prop parked between the camera and Orion stays solid-looking
+   * and blinds you.
+   */
+  prop(x, y, z, w, d, h, tex = 'rock') { this.o.props.push({ x, y, z, w, d, h, tex }); }
+
+  /**
+   * A cloud. Pure decoration with no collider at all, which is why it is not
+   * a `tree`: flora has to stand on something (the checker fails a floating
+   * one), and a cloud that has to stand on something is not a cloud.
+   *
+   * `drift` is how far it slides sideways, in units, over ~40 seconds.
+   */
+  cloud(x, y, z, s = 1, drift = 0) { this.o.clouds.push({ x, y, z, s, drift }); }
+
   enemy(kind, x, y, z, opt = {}) { this.o.enemies.push({ kind, x, y, z, opt }); }
   /**
    * The boss gate. A solid wall that CRUMBLES when the boss goes down, so the
@@ -181,7 +227,7 @@ class Builder {
 
 /** Run a level definition's build() and return its plain data. */
 export function buildLevel(def) {
-  const out = { solids: [], movers: [], stars: [], crates: [], enemies: [], checkpoints: [], goal: null, trees: [], ground: null, portals: [], gates: [] };
+  const out = { solids: [], movers: [], stars: [], crates: [], enemies: [], checkpoints: [], goal: null, trees: [], ground: null, portals: [], gates: [], clouds: [], props: [] };
   def.build(new Builder(out));
   for (const c of out.crates) out.solids.push(crateSolid(c));
   for (const t of out.trees) if (t.solid) out.solids.push(trunkSolid(t));

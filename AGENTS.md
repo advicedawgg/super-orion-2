@@ -35,8 +35,43 @@ the whole "levels are too short" note — star counts don't answer it.
 sees it for free.
 
 Anything both the game and the checker need to agree on lives in exactly one exported
-function — `crateSolid`, `trunkSolid`, `killPlane`. Add to that list rather than
-duplicating a derivation. A checker that models the world separately is a checker that lies.
+function — `crateSolid`, `trunkSolid`, `killPlane`, `CRATE_STARS`, `TNT_R`. Add to that
+list rather than duplicating a derivation. A checker that models the world separately is
+a checker that lies.
+
+`CRATE_STARS` is the newest entry and it is there because of a bug that had been sitting
+in the repo since crates existed: `world.js` and `check.js` each carried their own copy of
+"what a crate is worth", so the level totals the gate printed and the totals the game paid
+out were two independent numbers that happened to agree. The first new crate kind broke
+that silently. One table now, in the pure module.
+
+## Enemies
+
+`ENEMY` in `src/world.js` is the art and the tick; `BODY` in `src/builder.js` is the size
+and default patrol the checker sweeps. Both halves are needed for a new kind.
+
+| kind | stomp | spin | notes |
+|---|---|---|---|
+| `grumblin` | ✔ | ✔ | the bread-and-butter patroller |
+| `hardhat` | ✘ | ✔ | a grumblin in a helmet — the level that teaches X |
+| `hopper` | ✔ | ✔ | hops on the spot; the timing is the problem |
+| `prickle` | ✘ | ✘ | jump over it |
+| `jelly` | **bounce** | ✘ | bell bounces you, tentacles sting — see below |
+| `zapdrone` | ✘ | ✘ | floats, fly around it |
+| `flapjack` | ✔ | ✔ | floats and bobs |
+| `king` | ✔ ×3 | ✘ | the boss |
+
+**A jellyfish has a top and a bottom, and it is the only enemy that does.** Sink onto the
+bell and you bounce (at the mode's `BOUNCE`, which underwater is worth more than a stroke
+and costs no air, so a line of them is a route up). Anything below the rim is tentacles
+and stings. The mechanism is `bouncy` in `updateEnemy`, and the part that is easy to get
+wrong is the frame AFTER the bounce: still inside its radius, no longer falling, which
+reads as a sting. `e.invT = .35` is what stops that — the same field the boss uses to
+avoid one stomp counting as three.
+
+`hardhat` is the only enemy in the game that teaches a BUTTON rather than a movement, so
+its silhouette carries a yellow hat on a green body: the two most different colours in the
+level it appears in. Do not make it subtle.
 
 ## Movement modes
 
@@ -48,8 +83,28 @@ the gate.
 | mode | lift | feel |
 |---|---|---|
 | *(none)* | jump, then double jump | the running game |
+| `moon` | jump, then double jump | same verbs, twice the hang time |
 | `swim` | every press is another stroke | low gravity, sinks at 6.5u/s |
 | `jet` | HOLD to thrust, climb capped at 14u/s | no jump at all |
+
+**`moon` is the cheap one and the one to copy.** It adds no verb: jump, double
+jump, spin and ground pound all still work and still mean the same thing, so
+nothing has to be explained to the player. Only the numbers move — 3.0u up on
+one jump instead of 2.39, 8.8u flat instead of 5.8, and about twice as long in
+the air. Because `tools/check.js` derives its arcs from `tuning(def.mode)`, a
+moon level is judged by the moon's arc for free.
+
+That last part only became true when the moon went in: `launchV` in the checker
+was hard-coded to the GLOBAL `T.JUMP_V`, which is right for every level that
+existed and wrong for any non-free mode that changes the jump. It now reads
+`t.JUMP_V`. Free modes keep the old permissive number on purpose — see the
+comment there.
+
+Every mode also carries a **`BOUNCE`**, the pop you get off something you landed
+on. `Player.bounce()` defaults to it. It is a per-mode constant rather than a
+fraction of `JUMP_V` because 0.82 of a jump is a satisfying hop on land and a
+rocket underwater, where a jump is half the size. A spring crate is the
+exception and stays global (`T.JUMP_V * 1.35`) in both the game and the gate.
 
 Both metered modes carry a **tank** — a 0..1 gauge that only refills with your feet on solid ground
 (`tankStep`). Swimming spends 0.125 a stroke (8 strokes a lungful); the jetpack burns 0.25 a second
@@ -115,6 +170,25 @@ jump-arc flood fill). `B.portal(x, y, z, level)` is a doorway; walking into it p
 level. It borrows jungle's music via `music: 'jungle'`, which overrides the usual
 "track is named after the level" rule; give it its own theme when there is one.
 
+**Ten doors, in two rows.** Worlds 1 and 2 stand on the lawn in an arc; World 3 stands on
+a raised terrace behind them, staggered against the gaps in the front row. Line the rows
+up instead and every back placard hides behind a front one, because this camera only has
+the one angle. The terrace is not decoration either: it says "these are the new ones"
+before you have read a single sign, and height says that better than any label.
+
+Two camera facts the hub is built around, both learned the hard way:
+
+- **`shownLevel()` has to return `HUB` when you are on the map.** It did not, so
+  `HUB.camOff` and `HUB.sunDir` were dead data for the whole life of the hub and the
+  island was framed with the boom of whichever level you last played. If the level select
+  ever looks different depending on where you came from, this is why.
+- **The front rail must be closer to the lens than the bottom of the frustum.** The boom
+  sits 23u behind Orion and tilts ~24° down; the bottom ray reaches rail height about 7u
+  out. Put the island edge nearer than that and the rail is out of shot, which is what you
+  want. Put it further and it parks itself across the bottom third of the level select —
+  and `keepOrionInSight` will NOT save you, because the rail is under the sightline rather
+  than across it.
+
 **Progression is linear.** `unlocked(i)` in `main.js` is `i === 0 || cleared(i - 1)`: the
 first level is always open, clearing one opens the next, and everything already cleared
 stays open so you can go back and beat your score. A locked ring is dark and still, its
@@ -132,6 +206,40 @@ jump clears 4.08u, and off the 2.2u outcrops that is 6.3u. The thing that actual
 you in is `B.barrier()` at 9u — a collider with no mesh, using the same `scenery` flag tree
 trunks already use, so world.js skips drawing it and check.js skips treating it as a
 platform. Raising the *visible* rail that high would wall the sea out instead.
+
+## Crate kinds
+
+`CRATE` in `src/world.js` is the behaviour and the art; `CRATE_STARS` in
+`src/builder.js` is what each one is worth, and the checker reads that. Three cues per
+kind, deliberately redundant: a tint, a stencil on every face, and a topper you can read
+from behind or in shadow. Tint alone was the whole difference once, and you could not tell
+the bonus crate from the bouncy one.
+
+| kind | ⭐ | what it does |
+|---|---|---|
+| `plain` | 1 | the crate |
+| `star` | 5 | a pile of them |
+| `life` | 0 | 1-UP |
+| `heart` | 0 | refills one heart |
+| `spring` | 0 | bounces you at 1.35 of a jump |
+| `iron` | 3 | **only a ground pound opens it** |
+| `tnt` | 0 | takes everything within `TNT_R` with it |
+
+Two of those have traps in them.
+
+**`iron` needs `player.pounding`, not `player.stomping`.** A ground pound ENDS the moment
+it lands: `player.update()` clears `stomping` on the grounding frame, and `world.update()`
+— which is where crates are tested — runs after it. Asking `stomping` therefore gets
+`false` on the exact frame the impact happens, and the crate never opens. `poundT` is a
+0.14s window set at the moment of landing, and `pounding` is the getter to ask.
+
+**`tnt` pays out by taking its neighbours with it**, so put it in the MIDDLE of a stack —
+on the bottom row of a pyramid, everything above is inside the blast. On its own it is a
+crate worth zero stars with a fuse drawn on it, which reads as a bug rather than a
+decision, and `check.js` warns about exactly that. The chain is a QUEUE, not recursion, so
+a row of them cannot blow the stack; and the whole chain pays out as ONE `boom` event,
+because fifteen crate sounds and fifteen "+1 ⭐" toasts is not fifteen times better than
+one bang.
 
 ## Crates fall
 
@@ -172,14 +280,37 @@ Levels are `build(B)` functions in `src/levels.js` run against the Builder.
   ice pads were doing before they were an ice rink in a space station.
 - Trees are **solid by default** (you can't walk through a trunk you're standing beside).
   Backdrop trees must pass `solid = false`, or a falling player lands on one instead of dying.
+- **`B.prop()` is a box you can see and cannot touch** — a distant mesa, a moon boulder,
+  a lander. It is not a `wall()` because a wall is a platform and the checker would then
+  have to prove you can reach the top of a butte 200u off the path; it is not a
+  `barrier()` because that is the opposite problem, a collider with no mesh. **Keep props
+  off the corridor.** `keepOrionInSight` only ghosts things in `solids`, so a prop parked
+  between the camera and Orion stays solid-looking and blinds you — and nothing in the
+  gate will tell you.
+- **`B.cloud()`** is decoration with no collider at all, which is what a cloud has to be:
+  a cloud you can land on is a platform, and a platform you can see through is a lie. It
+  is deliberately not flora — flora must stand on something (the checker fails a floating
+  tree), and a cloud that has to stand on something is not a cloud. Clouds draw unlit, or
+  a Lambert puff under one low sun goes grey underneath and reads as a rock in the sky.
 - **Flora has kinds.** `B.tree(x,y,z,s,solid,kind)` where kind ∈ `FLORA` (`src/builder.js`):
-  `pine`, `kelp`, `coral`, `fan`, `crystal`. Only a pine has a trunk you can bump into —
+  `pine`, `kelp`, `coral`, `fan`, `crystal`, `cactus`, `shrub`. Only a pine has a trunk you can bump into —
   `trunkSolid` models a tree — so the checker fails any other kind marked solid, and
   `B.weed(x,y,z,s,kind)` is the shorthand that can't get that wrong. Use the right one for
   the place: the reef was planted with conifers for five playtests because `B.tree` was the
   only call there was, and nobody walks to the edge of the one level it showed in.
   `world.js` draws each kind (`addKelp` / `addCoral` / `addFan` / `addCrystal`); the sway is
   nested groups plus one sine per joint, and anything pushed to `this.flora` gets ticked.
+- **Flora is the mesh budget, every single time.** A cactus is ten meshes and a backdrop
+  loop runs the length of the level: Dust Devil Dunes shipped its first draft at 1787
+  meshes — heavier than anything else in the game — purely on cacti spaced every 17u with
+  ten spines each. Five spines and a 30u spacing took 585 meshes off it and the desert
+  looks identical. Count before you plant.
+- **Backdrop pines are batched.** Any tree with `solid = false` and kind `pine` goes into
+  one `InstancedMesh` per part instead of a four-mesh group, which is 640 draw calls off
+  Jungle Jog. They also stop casting shadows, and that is not a detail you can move back:
+  an InstancedMesh is culled as ONE object, so a batch spanning a 660u level is inside the
+  shadow frustum somewhere for the whole level and would render all 160 trees into the
+  shadow map every frame. They stand 20u below the play space. Nothing is lost.
 - **Lava ground draws unlit.** `ground(y, 'lava')` gets a MeshBasicMaterial at full
   brightness — it is the light source, not a lit surface. Shaded like rock in a cave lit by
   one dim sun it came out mud brown, and mud does not read as "do not land here".
@@ -220,6 +351,26 @@ for exactly that reason.
 - Damage does NOT reset when you die: the boss keeps his hp and his rage across a respawn,
   which is the kind thing to do to a kid on his fourth attempt.
 
+## The clock, the combo and the magnet
+
+Three bits of feel that all had to stay out of the way of the seven-year-old they are for.
+
+- **The run clock** (`G.runT`) ticks in `PLAY` and nowhere else, so a pause, a death card
+  or a read of the sound menu is not held against you. It is per ATTEMPT rather than per
+  life: it survives a death and a checkpoint respawn, and only a fresh entry from the map
+  resets it. Best times live under `tm` in the save — a SEPARATE map from `lv`, because
+  `id in G.lv` is what "have you cleared this" means everywhere, including `unlocked()`,
+  and it has to stay a plain membership test. The HUD number is deliberately small and
+  grey, and only goes gold while you are ahead of your own record: a kid who wants to race
+  can read it, a kid who doesn't should never feel chased by it.
+- **The combo** counts crates smashed within 1.6s of each other and awards NOTHING. The
+  chain is the reward. Make it worth stars and "smash everything", which is what a
+  seven-year-old does anyway, becomes something you can do wrong.
+- **The magnet** pulls a star to your chest inside 3u. It does not widen the collection
+  radius — the star travels, the rule doesn't — so everything the checker proved about
+  where a star can be reached from still holds. Out of range it eases back home, so a star
+  you nearly touched and ran away from is where you left it when you come back.
+
 ## Easter eggs
 
 `In.cheat(word, fn)` in `src/main.js`. **A typed cheat's letters are still live game keys**, which
@@ -235,6 +386,12 @@ either rather than trusting anyone to remember:
 
 The letter set is derived from `KEYMAP` rather than hand-listed, so remapping a control can't leave
 the guard stale. It is why the fart is spelled `toot`.
+
+Current words: `sootie` `shiny` `egg` `love` `daddy` `toot` `blast` `luna`. The last two
+drive the new mechanics — `blast` sets off every fuse in the level, `luna` turns moon
+gravity on and off anywhere. `luna` refuses in `swim` and `jet`: those modes meter lift
+with a tank, and swapping the tuning out from under one takes the gauge, the gear and the
+only way up with it.
 
 ## Never do this
 
@@ -305,6 +462,51 @@ then `ffmpeg -af volumedetect` and `-af silencedetect`. A 13-second or silent tr
 exactly like a good one on disk. Also match the level: a fresh render can master 4 dB hotter
 than the rest of the soundtrack, which is jarring when the level changes.
 
+### The caption DOES matter — just not the "no vocals" part (2026-08-21)
+
+The section below is still true: saying "no singing" more firmly does nothing, and
+frost proved that over three re-rolls. But it was over-generalised into "captions do
+not work", and this round showed that is wrong. **Removing the words that IMPLY a
+singer is a different intervention from adding words that forbid one, and it works.**
+
+Two tracks failed their seed sweep outright while three came up clean on the first or
+second seed. Both failures named something vocal-adjacent:
+
+| track | original caption said | best of 6 seeds | reworded | result |
+|---|---|---|---|---|
+| dunes | "spaghetti-western", "mariachi" | −10.1 dB | genre words removed, instruments only | **−14.7 dB** |
+| lunar | "wide shimmering reverb pad", "long ringing tails" | −8.8 dB (fail, all six sang) | "every part is plucked or struck, nothing sustained or washy" | **−44.1 dB, first seed** |
+
+Two different mechanisms, and it is worth knowing which is which:
+
+- **A genre partly defined by its vocal** (mariachi, spaghetti-western, gospel, opera)
+  pulls a singer in no matter how many times the caption says not to. Describe the
+  instruments instead and name no genre at all.
+- **Sustained tonal wash** — pads, long reverb tails, "ambient" — is what a vocal stem
+  LOOKS like to source separation, so an ambient track cannot measure clean whether or
+  not anyone is singing on it. That makes `vocalcheck.py` unreliable on that kind of
+  material, and it is also simply the wrong music for a platformer. Ask for parts that
+  are plucked, struck or blown and the problem disappears at both ends.
+
+So the order to try things in, cheapest first: **reword the caption to remove implied
+voices → roll seeds → measure.** Not "say no vocals louder", and not the AR cfg.
+
+### Loudness: a fresh render masters HOT
+
+Measured across this round — the five new tracks came out at **−9.2 to −11.3 LUFS**
+against **−12.6 to −16.2** for the six already in the game. Walking out of the reef and
+into the castle would have been a 7 LUFS jump.
+
+`ffmpeg -af loudnorm=print_format=json` gives you the integrated figure; the fix is a
+plain `volume=<gain>dB` re-encode to **−14 LUFS**, which is the middle of the shipped
+set. Use gain, not `loudnorm`'s own filter: every one of these needed attenuating, and
+attenuation is transparent, where loudnorm would bring a limiter and a dynamics pass
+along to solve a problem that is one multiply. Peaks land at −2 to −4 dBFS afterwards,
+which is fine.
+
+`mean_volume` is NOT the number to match on — it disagrees with perceived loudness on
+material this different. Use LUFS.
+
 ### "No vocals" is not a request the model honours
 
 It is the single most expensive failure here — frost was re-rolled **three times** across two
@@ -320,6 +522,41 @@ firmly". Captions do not work. What does:
 
 `SEED=1234 CFG=2.6 node tools/genmusic.js frost` overrides both for one run, for exactly this.
 Pin the winner back into `TRACKS` — a track you cannot reproduce is a track you cannot fix.
+
+### The autoregressive cfg is NOT the vocal knob (measured 2026-08-21)
+
+`MiniMaxMusic3TextEncode.cfg_scale` and `KSampler.cfg` are different knobs — the
+first drives the autoregressive stage that picks structure and delivery, the second
+drives acoustic synthesis — and the sibling music3 project found that raising the AR
+one from 1.7 to 6.0 is what finally made it honour a *genre* it had been ignoring.
+
+That does not transfer to "stop singing". Same track, same seed 3312, same caption,
+only `cfg_scale` differing:
+
+| ar_cfg | length | vocals |
+|---|---|---|
+| 1.7 | 100.0s | −6.7 dB (sings) |
+| 6.0 | 70.4s | −7.1 dB (sings) |
+
+0.4 dB — noise — for 30% of the track's length. **Raising it costs real duration and
+buys nothing here.** `genmusic.js` therefore keeps 1.7, and `arCfg` exists on a spec
+only so the next person does not have to run this A/B again.
+
+The conclusion the repo already had still stands and is still the only thing that
+works: **the seed dominates, so roll several and measure.** What changed is that
+rolling is now scripted rather than done by hand — see below.
+
+### Rolling seeds in bulk
+
+`tools/roll.py` renders a list of seeds for each track, measures every take with the
+same source separation `vocalcheck.py` uses, keeps the cleanest, and stops early once
+one lands under −14 dB. It also discards anything under 30 s, because the seed decides
+LENGTH as well as vocal content and a 14-second stub is a documented failure mode.
+
+Budget it properly before starting one: a take is **~3.5 minutes** on the 4090 (two
+autoregressive passes — the negative prompt runs the AR stage a second time — plus 30
+diffusion steps and a tiled decode), and ~30 s of demucs on top. Six seeds across five
+tracks is two hours if none of them come up clean early.
 
 ### Checking for vocals IS automatable — with the right tool
 

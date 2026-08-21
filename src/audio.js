@@ -140,15 +140,49 @@ const SFX = {
   rimshot: () => { noise(.07, .22, 320, 180, 1.2); noise(.07, .20, 380, 200, 1.2, .1); noise(.6, .16, 5200, 3000, .5, .2); },
   // Yes, it is a fart. He is seven.
   toot: () => { tone('sawtooth', 130, 62, .42, .17); noise(.42, .10, 260, 90, 3.2); tone('square', 96, 54, .34, .07, .05); },
+
+  /* ---- the new crates ---- */
+  // A tnt chain. Two layers: the crack of the charge and the low body of it
+  // rolling away after. One noise burst on its own is a hi-hat, not a bang.
+  boom: () => {
+    noise(.09, .30, 2600, 900, .7);
+    noise(.75, .26, 420, 60, .5, .02);
+    tone('sawtooth', 130, 34, .55, .17, .01);
+    tone('square', 78, 30, .70, .10, .05);
+  },
+  // A spin that skipped off an iron crate. Bright, metallic, and deliberately
+  // NOT a bonk: the kid has to be able to hear the difference between "that
+  // did nothing" and "that thing is different".
+  clang: () => {
+    tone('square', 1450, 1180, .16, .11);
+    tone('square', 2170, 1900, .22, .06, .01);
+    noise(.16, .10, 5200, 2600, 2.2);
+  },
+  // Bouncing off a jellyfish bell. Wetter and lower than the spring crate,
+  // because it happens underwater and it happens to something alive.
+  boing: () => {
+    tone('sine', 190, 720, .26, .17);
+    tone('sine', 95, 360, .30, .09, .02);
+    noise(.18, .05, 500, 1400, 2.6);
+  },
+  // The crate combo, `n` smashes in. Rising fifths that keep climbing — the
+  // whole reward is that it does not stop going up while you keep going.
+  combo: (n = 1) => {
+    const f = 523 * Math.pow(1.0595, Math.min(24, n * 2));
+    tone('triangle', f, f, .16, .15);
+    tone('triangle', f * 1.5, f * 1.5, .20, .08, .03);
+  },
 };
 
-export function sfx(name) { SFX[name]?.(); }
+/** `arg` reaches the recipe — only the pitched ones (`combo`) read it. */
+export function sfx(name, arg) { SFX[name]?.(arg); }
 
 /* ------------------------------------------------------------------ music */
 // Add an id here once assets/audio/<id>.mp3 exists. Missing files stay silent
 // rather than throwing — the game must never fail to start over a soundtrack.
 // Generated locally by tools/genmusic.js (MiniMax Music 3 on the 4090).
-export const TRACKS = new Set(['jungle', 'coast', 'frost', 'reef', 'cosmic', 'title']);
+export const TRACKS = new Set(['jungle', 'coast', 'frost', 'reef', 'cosmic', 'title',
+                               'cavern', 'dunes', 'lunar', 'skyway', 'castle']);
 
 /**
  * Play a track. Runs 0..loopEnd once — the intro — then repeats

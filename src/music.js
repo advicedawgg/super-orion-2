@@ -25,5 +25,25 @@ export const LOOPS = {
   "reef": {
     "loopStart": 30.7897,
     "loopEnd": 91.3093
+  },
+  "dunes": {
+    "loopStart": 28.0729,
+    "loopEnd": 57.8101
+  },
+  "cavern": {
+    "loopStart": 15.0233,
+    "loopEnd": 68.3454
+  },
+  "lunar": {
+    "loopStart": 28.1658,
+    "loopEnd": 56.0471
+  },
+  "skyway": {
+    "loopStart": 35.4801,
+    "loopEnd": 82.2786
+  },
+  "castle": {
+    "loopStart": 15.9289,
+    "loopEnd": 56.1639
   }
 };

@@ -33,14 +33,17 @@ frame for the whole coyote window. None of those were visible in the diff.
   its **top face**. Write Z anchors out in full — chaining them is how platforms silently
   overlapped and z-fought.
 - Anything the game and the checker must agree on lives in exactly ONE exported function
-  (`crateSolid`, `trunkSolid`, `killPlane`, `FLOATING`, `FLORA` in `src/builder.js`; `tuning()`
-  in `src/physics.js`). Add to that list rather than duplicating a derivation. A checker that
-  models the world separately is a checker that lies.
-- A level's `mode` (`'swim'` / `'jet'`) is a patch on `T`, read by both the game and the
-  checker through `tuning(def.mode)`. Both REQUIRE a `ceilY`, and both meter lift with a
-  **tank** that only refills on solid ground — that is what stops you swimming or flying
-  over the entire level. The checker proves tank range instead of jump arcs there.
-  See AGENTS.md → Movement modes.
+  (`crateSolid`, `trunkSolid`, `killPlane`, `FLOATING`, `FLORA`, `CRATE_STARS`, `TNT_R` in
+  `src/builder.js`; `tuning()` in `src/physics.js`). Add to that list rather than duplicating
+  a derivation. A checker that models the world separately is a checker that lies.
+- A level's `mode` is a patch on `T`, read by both the game and the checker through
+  `tuning(def.mode)`. `'moon'` is the cheap kind — it adds no verb, only numbers, so the
+  checker judges it by its own arc for free. `'swim'` and `'jet'` are **free modes**: both
+  REQUIRE a `ceilY`, and both meter lift with a **tank** that only refills on solid ground,
+  which is what stops you swimming or flying over the entire level. The checker proves tank
+  range instead of jump arcs there. See AGENTS.md → Movement modes.
+- **`B.prop()` has no collider and `keepOrionInSight` cannot ghost it.** Distant scenery
+  only — a prop between the camera and Orion blinds you, and no gate will catch it.
 - **The camera must never lose sight of Orion.** `keepOrionInSight()` hides whatever is
   between it and him. Do not replace that with a shorter boom — the corridor walls are
   56u wide and pulling in parks the camera inside one. See AGENTS.md.
@@ -61,14 +64,39 @@ npx http-server -p 8791 -c-1      # -c-1 matters; http-server caches for an hour
 
 `file://` will not work — ES modules need an origin. Debug handle: `window.__SO2`.
 
-## What is newest (2026-08-19)
+## What is newest (2026-08-21)
 
-**Crystal Cavern** at index 3 (World 2 needed a plain running level before the two free-movement
-ones) and **King Dad's Castle** at 6 — the game's first boss, and its ending. A **sound menu**
-(O, or the tappable pill on the title and pause cards). Typed **easter eggs** — `dad`, `love`,
-`toot`, `egg` on top of the existing `sootie` and `star`; see AGENTS.md for the letter trap that
-governs which words are legal. And the reef's backdrop is kelp and coral rather than the pine
-trees that had been growing underwater since it was built.
+**World 3**, three levels, inserted before the castle so the castle stays the ending:
+
+| # | level | what's new in it |
+|---|---|---|
+| 7 | **Dust Devil Dunes** | `tnt` crates, the `hardhat` enemy, `heart` crates |
+| 8 | **Lunar Leapfrog** | `mode: 'moon'` — low gravity, `iron` crates, the `hopper` |
+| 9 | **Skyway Scramble** | movers and springs as the whole idea; `B.cloud()` |
+
+Ten levels now, so **the hub grew a terrace**: Worlds 1–2 on the lawn, World 3 up the steps,
+staggered so no placard hides behind another. Read AGENTS.md → The hub before touching it;
+both of its camera rules were learned by breaking them.
+
+Also: a **run clock** with best times per level, a **crate combo**, a **star magnet**, camera
+**shake**, and backdrop pines are now **instanced** (640 draw calls off Jungle Jog).
+
+**Every level has its own music now.** Five tracks generated the same day; only the hub still
+borrows. Two things that round taught, both in AGENTS.md → Assets: the autoregressive cfg is a
+GENRE knob and does nothing about singing, and **rewording a caption to remove implied voices**
+(a vocal genre, a sustained pad) is what actually stops it — lunar went from singing on all six
+seeds to −44.1 dB on the first. A fresh render also masters ~4 LUFS hotter than the rest of the
+soundtrack and has to be attenuated to −14 LUFS.
+
+Two real bugs fixed on the way, both worth knowing about:
+
+- `shownLevel()` never returned `HUB`, so `HUB.camOff` and `HUB.sunDir` had never once been
+  used — the map was always framed with the last level's camera.
+- The checker's `launchV` was hard-coded to the global `T.JUMP_V`, which is only correct for
+  a mode that doesn't change the jump. It reads `t.JUMP_V` now.
+
+**Jellyfish bounce.** Land on the bell and you spring off it; the tentacles still sting. See
+AGENTS.md → Enemies for the invulnerability window that makes it work.
 
 The boss is the one thing in the repo the gate cannot fully prove — `tools/check.js` pairs the
 king with his gate and proves his arena, but the fight itself needs a browser. See AGENTS.md →
@@ -76,15 +104,9 @@ The boss.
 
 ## What to work on
 
-See **`README.md` → Next**. The 2026-08-16 playtest round is done: the spin has an audible
-sound, the flapjack is an actual bat rather than two spinning billboards, the camera cuts
-away anything blocking Orion, the reef is a scuba dive with bubbles, both free modes meter
-lift with a tank, and twelve enemies that patrolled through solid rock were found by a new
-checker pass and fixed.
-
-What is left is mostly **things a machine cannot check**: whether the difficulty curve suits
-Orion, whether the tank makes the reef and the flight level better or just annoying, and
-whether the re-rolled `frost.mp3` (seed 2077) still sings. All need a human.
+See **`README.md` → Next**. What is left is mostly **things a machine cannot check**: whether
+the difficulty curve across ten levels suits Orion, whether the moon feels good or floaty and
+vague, and whether the five new tracks are any good. They are measured, not heard.
 
 ## Generating assets
 

@@ -902,10 +902,6 @@ export const LEVELS = [
 
 {
   id: 'cavern', name: 'Crystal Cavern', world: 2,
-  // No cavern track has been generated yet, so it borrows the flight level's —
-  // the only one in the set that already sounds like a big dark space. Drop
-  // this line once `node tools/genmusic.js cavern` has produced cavern.mp3.
-  music: 'cosmic',
   sky: [0x0a0716, 0x2b1a45], fog: [0x140c26, 22, 115],
   sun: 0xc2a8ff, sunDir: [-0.32, 1, 0.42], amb: 0x241a3c, sunPower: 1.45,
   camYaw: 0, camOff: [0, 5.6, 12.5], start: [0, 0, 14],
@@ -1717,10 +1713,804 @@ export const LEVELS = [
 },
 
 {
-  id: 'castle', name: "King Dad's Castle", world: 2,
-  // Borrowed, like the cavern's. A boss fight wants its own track more than
-  // any other level in the game — see README → Next.
-  music: 'cosmic',
+  id: 'dunes', name: 'Dust Devil Dunes', world: 3,
+  sky: [0xe07a3c, 0xffdca8], fog: [0xf0bf8a, 40, 170],
+  sun: 0xffd9a0, sunDir: [-0.62, 1, 0.34], amb: 0x6b4526, sunPower: 2.3,
+  camYaw: 0, start: [0, 1, 12],
+  hint: 'HARD HATS bounce you off — spin them with X. And that fizzing crate? Stand back.',
+  build(B) {
+    // World 3 opens on a running level, the same way World 2 did: two new
+    // crate kinds and a new enemy is already a lot to meet in one place, and
+    // meeting them while ALSO learning a new way to move is too much.
+    //
+    // The valley floor is 16u down and sand-coloured. It is not solid: a miss
+    // is a death, it just looks like a fall into the desert rather than a fall
+    // into nothing.
+    B.ground(-16, 'sand');
+
+    // The buttes. Props, not walls — nobody should ever stand on one, and the
+    // checker would otherwise spend its time proving you cannot. They sit well
+    // off the corridor on both sides so they never come between the camera and
+    // Orion, which is the one thing a prop cannot survive.
+    for (let z = 20; z > -620; z -= 46) {
+      const h = 22 + ((Math.abs(z) * 7) % 17);
+      B.prop(-42 + (z % 9), -16 + h, z, 20, 26, h, 'sandstone');
+      B.prop(46 + (z % 7), -16 + h * .8, z - 22, 24, 22, h * .8, 'sandstone');
+    }
+    // Ground cover on the valley floor, so the drop reads as a place. Spaced
+    // at 30u rather than 17: a cactus is ten meshes and this loop runs the
+    // length of the level, which is how the desert became the most expensive
+    // thing in the game to draw.
+    for (let z = 16; z > -620; z -= 30) {
+      B.weed(-20 + (z % 11), -16, z, 1.5 + (Math.abs(z) % 5) / 5, 'cactus');
+      B.weed(24 + (z % 8), -16, z - 9, 1.2 + (Math.abs(z) % 4) / 4, 'shrub');
+    }
+
+    /* --- A: the trailhead. Wide, flat, one hard hat with room ------------- */
+    B.floor(0, 0, 4, 14, 26, 'mesa');                        // z 17 .. -9
+    B.starLine(0, 1.2, 10, 5, [0, 0, -2.4]);
+    B.weed(-6.2, 0, 8, 1.1, 'cactus');
+    B.weed(6.2, 0, 2, 1.3, 'cactus');
+    B.weed(-6.0, 0, -5, .9, 'shrub');
+    // Deliberately alone on a wide floor. The first hard hat has to be a thing
+    // you can walk up to, jump on, bounce off and think about.
+    B.enemy('hardhat', 0, 0, -4, { axis: 'x', range: 7 });
+    B.crate(-4.4, 0, -7, 'plain');
+    B.crate(4.4, 0, -7, 'plain');
+
+    /* --- B: the fizzing crate. One tnt in the middle of five -------------- */
+    B.floor(0, 0, -18, 12, 10, 'mesa');                      // z -13 .. -23
+    B.crate(0, 0, -18, 'tnt');
+    B.crateRow(-4.2, 0, -18, 2, 'plain', [2.1, 0, 0]);       // x -4.2, -2.1
+    B.crateRow(2.1, 0, -18, 2, 'plain', [2.1, 0, 0]);        // x  2.1,  4.2
+    B.crate(0, 0, -20.5, 'star');                            // the payout
+    B.crate(0, 0, -15.5, 'plain');
+    B.starLine(-4, 2.6, -21.5, 5, [2, 0, 0]);
+
+    /* --- C: three sandstone stacks over the valley ------------------------ */
+    B.box(-3, 0.6, -30, 5, 5, 10, 'sandstone');              // z -32.5 .. -27.5
+    B.box(3, 1.2, -38, 5, 5, 12, 'sandstone');               // z -40.5 .. -35.5
+    B.box(-3, 1.8, -46, 5, 5, 14, 'sandstone');              // z -48.5 .. -43.5
+    B.star(-3, 2.0, -30);
+    B.star(3, 2.6, -38);
+    B.star(-3, 3.2, -46);
+    B.starLine(0, 3.4, -34, 3, [0, 0, -0.9], 1.2);
+    B.starLine(0, 4.0, -42, 3, [0, 0, -0.9], 1.2);
+
+    /* --- D: the waterhole. Checkpoint 1 ----------------------------------- */
+    B.floor(0, 1.8, -59, 14, 14, 'mesa');                    // z -52 .. -66
+    B.checkpoint(0, 1.8, -59);
+    B.enemy('hardhat', 0, 1.8, -63, { axis: 'x', range: 8 });
+    B.crate(-4.6, 1.8, -55, 'plain');
+    B.crate(4.6, 1.8, -55, 'heart');                         // first heart crate
+    B.weed(-6.4, 1.8, -64, 1.2, 'cactus');
+    B.weed(6.4, 1.8, -64, 1.0, 'cactus');
+    B.starLine(-4, 3.2, -57, 5, [2, 0, 0]);
+
+    /* --- E: two ledges, one spiky sitter each ----------------------------- */
+    B.floor(-4, 2.6, -76, 7, 12, 'mesa');                    // z -70 .. -82
+    B.enemy('prickle', -4, 2.6, -73, {});
+    B.starLine(-4, 4.0, -79, 3, [0, 0, -1.6]);
+    B.floor(4, 3.4, -92, 7, 12, 'mesa');                     // z -86 .. -98
+    B.enemy('prickle', 4, 3.4, -89, {});
+    B.crate(4, 3.4, -95, 'plain');
+
+    /* --- F: the pan. Wide, and three things walking on it ----------------- */
+    B.floor(0, 3.4, -110, 16, 16, 'mesa');                   // z -102 .. -118
+    B.enemy('hardhat', -5, 3.4, -108, { axis: 'z', range: 6 });
+    B.enemy('grumblin', 5, 3.4, -108, { axis: 'z', range: 6 });
+    B.enemy('hardhat', 0, 3.4, -115, { axis: 'x', range: 9 });
+    B.starLine(-6, 4.8, -110, 7, [2, 0, 0]);
+    B.crate(-6.6, 3.4, -104, 'star');
+    B.crate(6.6, 3.4, -104, 'plain');
+    B.weed(-7.4, 3.4, -117, 1.4, 'cactus');
+
+    /* --- G: the powder keg. A pyramid with the fuse at the bottom --------- */
+    // The tnt is the middle of the bottom row on purpose: everything above it
+    // is inside the blast, so one hit takes nine crates. Put a fuse on the top
+    // of a stack and it is worth exactly itself.
+    B.floor(0, 3.4, -128, 12, 12, 'mesa');                   // z -122 .. -134
+    B.crate(-2.1, 3.4, -128, 'plain');
+    B.crate(0, 3.4, -128, 'tnt');
+    B.crate(2.1, 3.4, -128, 'plain');
+    B.crate(-1.05, 5.2, -128, 'plain');
+    B.crate(1.05, 5.2, -128, 'star');
+    B.crate(0, 7.0, -128, 'plain');
+    B.crate(-4.2, 3.4, -125, 'plain');
+    B.crate(4.2, 3.4, -125, 'plain');
+    B.starLine(0, 9.4, -128, 3, [0, 0.9, 0]);
+
+    /* --- H: two carts over the wash --------------------------------------- */
+    // Wood, not metal: out here it reads as a plank bridge someone dragged
+    // across, and what you RIDE has to look different from what you stand on.
+    B.mover(-5, 3.4, -141, 6, 6, 2, [5, 3.4, -141], 5, 'wood');    // z -144 .. -138
+    B.mover(5, 3.4, -152, 6, 6, 2, [-5, 3.4, -152], 6, 'wood');    // z -155 .. -149
+    B.star(-5, 4.8, -141);
+    B.star(5, 4.8, -152);
+    B.starLine(0, 5.6, -146, 3, [0, 0, -1.2], 1.2);
+
+    /* --- I: the shade. Checkpoint 2 --------------------------------------- */
+    B.floor(0, 3.4, -164, 12, 12, 'mesa');                   // z -158 .. -170
+    B.checkpoint(0, 3.4, -164);
+    B.enemy('hardhat', 0, 3.4, -167, { axis: 'x', range: 8 });
+    B.crate(-4.4, 3.4, -160, 'star');
+    B.crate(4.4, 3.4, -160, 'plain');
+    B.weed(-5.8, 3.4, -168, 1.3, 'cactus');
+
+    /* --- J: the switchback. Three steps up the mesa ----------------------- */
+    B.box(-4, 5.0, -178, 7, 8, 10, 'sandstone');             // z -182 .. -174
+    B.box(4, 6.6, -190, 7, 8, 12, 'sandstone');              // z -194 .. -186
+    B.box(-4, 8.2, -202, 7, 8, 14, 'sandstone');             // z -206 .. -198
+    B.star(-4, 6.4, -178);
+    B.star(4, 8.0, -190);
+    B.star(-4, 9.6, -202);
+    B.starLine(0, 7.4, -184, 3, [0, 0, -0.8], 1.0);
+    B.starLine(0, 9.0, -196, 3, [0, 0, -0.8], 1.0);
+
+    /* --- K: the high rim. Room to breathe, and something overhead --------- */
+    B.floor(0, 8.2, -220, 14, 16, 'mesa');                   // z -212 .. -228
+    B.enemy('flapjack', 0, 11.4, -216, { axis: 'x', range: 9, bob: 1.5 });
+    B.crateRow(-2.1, 8.2, -225, 3, 'plain');
+    B.starLine(-5, 9.6, -219, 6, [2, 0, 0]);
+    B.weed(-6.4, 8.2, -214, 1.5, 'cactus');
+    B.weed(6.4, 8.2, -226, 1.2, 'cactus');
+
+    /* --- L: fuse and hats. The tnt does the work if you let it ------------ */
+    B.floor(0, 8.2, -238, 13, 12, 'mesa');                   // z -232 .. -244
+    B.crate(-2.1, 8.2, -238, 'plain');
+    B.crate(0, 8.2, -238, 'tnt');
+    B.crate(2.1, 8.2, -238, 'star');
+    B.crate(-4.2, 8.2, -238, 'plain');
+    B.crate(4.2, 8.2, -238, 'plain');
+    // Far enough along z that their patrol never sweeps into the stack, close
+    // enough that the blast reaches them.
+    B.enemy('hardhat', -4, 8.2, -234, { axis: 'x', range: 4 });
+    B.enemy('hardhat', 4, 8.2, -242, { axis: 'x', range: 4 });
+
+    /* --- M: down the far side --------------------------------------------- */
+    B.box(0, 6.6, -252, 10, 8, 12, 'sandstone');             // z -256 .. -248
+    B.box(0, 5.0, -264, 10, 8, 14, 'sandstone');             // z -268 .. -260
+    B.starLine(0, 8.0, -252, 3, [0, 0, -1.4]);
+    B.starLine(0, 6.4, -264, 3, [0, 0, -1.4]);
+
+    /* --- N: the slot canyon. Checkpoint 3, walls close in ----------------- */
+    B.floor(0, 5.0, -279, 12, 18, 'mesa');                   // z -270 .. -288
+    B.checkpoint(0, 5.0, -279);
+    // Waist-and-a-bit high: a double jump gets you up there, which is the
+    // point — the ledges are where the good crates are.
+    B.wall(-7.5, 8.4, -279, 3, 18, 3.4, 'sandstone');        // x -9 .. -6
+    B.wall(7.5, 8.4, -279, 3, 18, 3.4, 'sandstone');         // x  6 ..  9
+    B.crate(-7.5, 8.4, -275, 'star');
+    B.crate(7.5, 8.4, -283, 'life');
+    B.enemy('prickle', 0, 5.0, -284, {});
+    B.starLine(-4, 6.4, -277, 5, [2, 0, 0]);
+
+    /* --- O: two shelves out of the canyon --------------------------------- */
+    B.floor(-5, 5.8, -298, 8, 14, 'mesa');                   // z -291 .. -305
+    B.enemy('hardhat', -5, 5.8, -296, { axis: 'z', range: 6 });
+    B.starLine(-5, 7.2, -302, 3, [0, 0, -1.6]);
+    B.floor(5, 6.6, -315, 8, 14, 'mesa');                    // z -308 .. -322
+    B.crate(5, 6.6, -312, 'plain');
+    B.starLine(5, 8.0, -318, 3, [0, 0, -1.6]);
+
+    /* --- P: the lookout --------------------------------------------------- */
+    B.floor(0, 6.6, -334, 15, 16, 'mesa');                   // z -326 .. -342
+    B.enemy('grumblin', 0, 6.6, -330, { axis: 'x', range: 9 });
+    B.enemy('hardhat', 0, 6.6, -338, { axis: 'x', range: 9 });
+    B.crate(-6.2, 6.6, -340, 'heart');
+    B.starLine(-5, 8.0, -334, 6, [2, 0, 0]);
+    B.weed(6.6, 6.6, -328, 1.6, 'cactus');
+
+    /* --- Q: stepping stones over the gully -------------------------------- */
+    B.box(-3, 6.6, -347, 4.5, 4.5, 16, 'sandstone');         // z -349.25 .. -344.75
+    B.box(3, 6.6, -355, 4.5, 4.5, 16, 'sandstone');          // z -357.25 .. -352.75
+    B.box(-3, 6.6, -363, 4.5, 4.5, 16, 'sandstone');         // z -365.25 .. -360.75
+    B.box(3, 6.6, -371, 4.5, 4.5, 16, 'sandstone');          // z -373.25 .. -368.75
+    B.star(-3, 8.0, -347);
+    B.star(3, 8.0, -355);
+    B.star(-3, 8.0, -363);
+    B.star(3, 8.0, -371);
+
+    /* --- R: the wind gap --------------------------------------------------- */
+    B.floor(0, 6.6, -384, 14, 16, 'mesa');                   // z -376 .. -392
+    B.enemy('flapjack', -4, 9.8, -380, { axis: 'x', range: 7, bob: 1.4 });
+    B.enemy('flapjack', 4, 9.8, -388, { axis: 'x', range: 7, bob: 1.4 });
+    B.crate(0, 6.6, -389, 'star');
+    B.starLine(-5, 8.0, -384, 6, [2, 0, 0]);
+
+    /* --- S: the long pan. Four hats and a fuse ---------------------------- */
+    B.floor(0, 6.6, -404, 16, 20, 'mesa');                   // z -394 .. -414
+    B.enemy('hardhat', -5, 6.6, -398, { axis: 'x', range: 6 });
+    B.enemy('hardhat', 5, 6.6, -398, { axis: 'x', range: 6 });
+    B.enemy('hardhat', 0, 6.6, -411, { axis: 'x', range: 10 });
+    B.crate(-2.1, 6.6, -405, 'plain');
+    B.crate(0, 6.6, -405, 'tnt');
+    B.crate(2.1, 6.6, -405, 'plain');
+    B.crate(0, 6.6, -402.5, 'star');
+    B.starLine(-6, 8.0, -404, 7, [2, 0, 0]);
+
+    /* --- T: back up onto the rim ------------------------------------------ */
+    B.box(-5, 7.8, -422, 7, 8, 18, 'sandstone');             // z -426 .. -418
+    B.box(5, 9.0, -434, 7, 8, 20, 'sandstone');              // z -438 .. -430
+    B.star(-5, 9.2, -422);
+    B.star(5, 10.4, -434);
+    B.starLine(0, 10.4, -428, 3, [0, 0, -0.8], 1.0);
+
+    /* --- U: the last big floor. Checkpoint 4 ------------------------------ */
+    B.floor(0, 9.0, -452, 14, 22, 'mesa');                   // z -441 .. -463
+    B.checkpoint(0, 9.0, -452);
+    B.enemy('hardhat', 0, 9.0, -447, { axis: 'x', range: 9 });
+    B.enemy('prickle', -4, 9.0, -459, {});
+    B.crate(4.6, 9.0, -459, 'star');
+    B.crateRow(-2.1, 9.0, -455, 3, 'plain');
+    B.weed(-6.4, 9.0, -443, 1.5, 'cactus');
+    B.weed(6.4, 9.0, -443, 1.3, 'cactus');
+    B.starLine(-5, 10.4, -450, 6, [2, 0, 0]);
+
+    /* --- V: the chasm. Two carts, and nothing under them ------------------ */
+    B.mover(-6, 9.0, -469, 6, 6, 2, [6, 9.0, -469], 5, 'wood');    // z -472 .. -466
+    B.mover(6, 9.0, -480, 6, 6, 2, [-6, 9.0, -480], 6, 'wood');    // z -483 .. -477
+    B.star(-6, 10.4, -469);
+    B.star(6, 10.4, -480);
+    B.starLine(0, 11.4, -474, 3, [0, 0, -1.2], 1.2);
+
+    /* --- W: the far side --------------------------------------------------- */
+    B.floor(0, 9.0, -492, 13, 14, 'mesa');                   // z -485 .. -499
+    B.enemy('grumblin', 0, 9.0, -492, { axis: 'x', range: 8 });
+    B.crate(-4.4, 9.0, -496, 'plain');
+    B.crate(4.4, 9.0, -496, 'plain');
+    B.starLine(-4, 10.4, -489, 5, [2, 0, 0]);
+
+    /* --- X: the descent ---------------------------------------------------- */
+    B.box(0, 7.8, -508, 10, 10, 20, 'sandstone');            // z -513 .. -503
+    B.box(0, 6.6, -522, 10, 10, 22, 'sandstone');            // z -527 .. -517
+    B.starLine(0, 9.2, -508, 3, [0, 0, -1.4]);
+    B.crate(0, 6.6, -522, 'plain');
+
+    /* --- Y: the last camp. Checkpoint 5 ----------------------------------- */
+    B.floor(0, 6.6, -540, 15, 18, 'mesa');                   // z -531 .. -549
+    B.checkpoint(0, 6.6, -540);
+    B.enemy('hardhat', -5, 6.6, -536, { axis: 'x', range: 6 });
+    B.enemy('hardhat', 5, 6.6, -544, { axis: 'x', range: 6 });
+    B.crate(0, 6.6, -534, 'heart');
+    B.starLine(-5, 8.0, -540, 6, [2, 0, 0]);
+    B.weed(-7.0, 6.6, -547, 1.4, 'cactus');
+    B.weed(7.0, 6.6, -533, 1.6, 'cactus');
+
+    /* --- Z: one last fuse, one last run ----------------------------------- */
+    B.floor(0, 6.6, -562, 12, 18, 'mesa');                   // z -553 .. -571
+    B.crate(-2.1, 6.6, -562, 'plain');
+    B.crate(0, 6.6, -562, 'tnt');
+    B.crate(2.1, 6.6, -562, 'plain');
+    B.crate(-1.05, 8.4, -562, 'star');
+    B.crate(1.05, 8.4, -562, 'plain');
+    B.crate(0, 6.6, -559, 'plain');
+    B.crate(0, 6.6, -565, 'plain');
+    B.starLine(-4, 8.0, -556, 5, [2, 0, 0]);
+
+    /* --- AA: the trail's end ---------------------------------------------- */
+    B.floor(0, 6.6, -585, 16, 22, 'mesa');                   // z -574 .. -596
+    B.weed(-7.2, 6.6, -578, 2.0, 'cactus');
+    B.weed(7.2, 6.6, -578, 1.8, 'cactus');
+    B.weed(-7.2, 6.6, -593, 1.5, 'shrub');
+    B.crate(-4.4, 6.6, -580, 'star');
+    B.crate(4.4, 6.6, -580, 'plain');
+    B.starLine(-4, 8.0, -584, 5, [2, 0, 0]);
+    B.goal(0, 6.6, -590);
+  },
+},
+{
+  id: 'lunar', name: 'Lunar Leapfrog', world: 3, mode: 'moon',
+  sky: [0x03040c, 0x141a38], fog: [0x0b1028, 34, 150],
+  sun: 0xdfe7ff, sunDir: [-0.42, 1, 0.5], amb: 0x2c3559, sunPower: 1.95,
+  // Pulled back and up. A moon jump hangs for a second and covers 14u; at the
+  // running game's boom the top of the arc is off the top of the screen and
+  // you land on faith.
+  camYaw: 0, camOff: [0, 7.0, 14.5], start: [0, 1, 12],
+  hint: 'LOW GRAVITY! You jump miles up here. Grey crates take a GROUND POUND — jump, then C.',
+  build(B) {
+    // `mode: 'moon'` is a patch on the tuning (MODES in src/physics.js) and
+    // nothing else: run, double jump, spin and ground pound all still work and
+    // still mean what they meant. It is the only new mode in the game that
+    // needs no new button explained — and because the checker reads the same
+    // tuning, every gap here is judged by the MOON's arc, not the earth one.
+    //
+    // Numbers to build to: 3.0u up on one jump, 5.1u on two, ~8.8u flat on one
+    // and ~13.9u on two. Everything below is spaced against those, which is
+    // why this level looks so much airier than the other six.
+    B.ground(-20, 'regolith');
+
+    // Boulders and crater rims, well off the corridor. Props: nothing here is
+    // a platform and the checker should not have to prove it.
+    for (let z = 18; z > -640; z -= 38) {
+      const h = 6 + ((Math.abs(z) * 5) % 13);
+      B.prop(-34 + (z % 7), -20 + h, z, 14, 16, h, 'rock');
+      B.prop(38 + (z % 5), -20 + h * .7, z - 18, 16, 14, h * .7, 'rock');
+    }
+    // Glow on the dust below, so the drop reads as a place rather than a hole.
+    for (let z = 14; z > -640; z -= 30) {
+      B.weed(-16 + (z % 9), -20, z, 1.6 + (Math.abs(z) % 5) / 4, 'crystal');
+      B.weed(19 + (z % 6), -20, z - 11, 1.2 + (Math.abs(z) % 4) / 4, 'crystal');
+    }
+
+    /* --- A: the landing site. Try one jump, then look at it --------------- */
+    B.floor(0, 0, 4, 14, 26, 'regolith');                    // z 17 .. -9
+    B.starLine(0, 1.4, 10, 5, [0, 0, -2.4]);
+    // The lander. A prop, because a kid WILL try to climb it and there is
+    // nothing up there — better it be scenery than a disappointment.
+    // `deck`, not `metal`: metal under this level's dim blue sun renders as a
+    // black cube, and a black cube in the corner of the frame reads as a hole
+    // in the world rather than as a spacecraft.
+    B.prop(-12, 3.4, 8, 5, 5, 3.4, 'deck');
+    B.prop(-12, 4.6, 8, 1.6, 1.6, 1.2, 'metal');
+    B.weed(6.2, 0, 6, 1.3, 'crystal');
+    B.weed(-6.2, 0, -6, 1.1, 'crystal');
+    // The first thing you meet is a hopper, on a wide floor, on its own. It
+    // moves in the one axis a platformer normally gives you for free.
+    B.enemy('hopper', 0, 0, -4, { axis: 'x', range: 6 });
+    B.crate(-4.4, 0, -7, 'plain');
+    B.crate(4.4, 0, -7, 'plain');
+
+    /* --- B: the grey crates. Nothing but a ground pound opens these ------- */
+    B.floor(0, 0, -20, 13, 14, 'regolith');                  // z -13 .. -27
+    B.crate(-3.2, 0, -20, 'iron');
+    B.crate(0, 0, -20, 'iron');
+    B.crate(3.2, 0, -20, 'iron');
+    B.crate(0, 0, -24, 'plain');                             // …and one that isn't
+    B.starLine(-4, 5.0, -20, 5, [2, 0, 0]);                  // high: this is the moon
+    B.weed(-5.8, 0, -25, 1.2, 'crystal');
+
+    /* --- C: the first proper moon jumps. 6u gaps, 2.4u steps -------------- */
+    B.box(-4, 2.4, -37, 6, 7, 12, 'rock');                   // z -40.5 .. -33.5
+    B.box(4, 4.8, -50, 6, 7, 14, 'rock');                    // z -53.5 .. -46.5
+    B.box(-4, 7.2, -63, 6, 7, 16, 'rock');                   // z -66.5 .. -59.5
+    B.star(-4, 4.0, -37);
+    B.star(4, 6.4, -50);
+    B.star(-4, 8.8, -63);
+    B.starLine(0, 6.4, -43, 4, [0, 0, -1.1], 2.0);           // the shape of the arc
+    B.starLine(0, 8.8, -56, 4, [0, 0, -1.1], 2.0);
+
+    /* --- D: the mare. Checkpoint 1 ---------------------------------------- */
+    B.floor(0, 7.2, -80, 15, 18, 'regolith');                // z -71 .. -89
+    B.checkpoint(0, 7.2, -80);
+    B.enemy('hopper', -4, 7.2, -76, { axis: 'x', range: 5 });
+    B.enemy('hopper', 4, 7.2, -84, { axis: 'x', range: 5 });
+    B.crate(-6.2, 7.2, -87, 'star');
+    B.crate(6.2, 7.2, -87, 'plain');
+    B.weed(-7.0, 7.2, -73, 1.6, 'crystal');
+    B.weed(7.0, 7.2, -73, 1.4, 'crystal');
+    B.starLine(-5, 8.6, -80, 6, [2, 0, 0]);
+
+    /* --- E: two long shelves. This is where the gaps get moon-sized ------- */
+    B.floor(-5, 7.2, -101, 8, 14, 'regolith');               // z -94 .. -108
+    B.enemy('prickle', -5, 7.2, -98, {});
+    B.starLine(-5, 8.6, -104, 3, [0, 0, -1.8]);
+    B.floor(5, 7.2, -122, 8, 14, 'regolith');                // z -115 .. -129
+    B.crate(5, 7.2, -119, 'iron');
+    B.starLine(0, 11.0, -111, 5, [0, 0, -1.5], 2.4);         // right across the gap
+
+    /* --- F: the dust bowl -------------------------------------------------- */
+    B.floor(0, 7.2, -142, 16, 16, 'regolith');               // z -134 .. -150
+    B.enemy('zapdrone', 0, 11.0, -138, { axis: 'x', range: 11 });
+    B.enemy('hopper', 0, 7.2, -147, { axis: 'x', range: 8 });
+    B.crateRow(-2.1, 7.2, -145, 3, 'plain');
+    B.crate(-6.4, 7.2, -137, 'heart');
+    B.starLine(-6, 8.6, -142, 7, [2, 0, 0]);
+
+    /* --- G: the vault. Three grey crates and a fuse to open them ---------- */
+    // A tnt takes iron with it, which is the shortcut — and finding that out
+    // is a better reward than the three stars are.
+    B.floor(0, 7.2, -162, 13, 12, 'regolith');               // z -156 .. -168
+    B.crate(-2.1, 7.2, -162, 'iron');
+    B.crate(0, 7.2, -162, 'tnt');
+    B.crate(2.1, 7.2, -162, 'iron');
+    B.crate(0, 7.2, -159, 'iron');
+    B.crate(0, 7.2, -165, 'star');
+    B.starLine(-5, 12.0, -162, 5, [2.5, 0, 0]);
+
+    /* --- H: leapfrog. Small pads, long hops ------------------------------- */
+    B.box(-4, 8.4, -178, 5, 5, 14, 'rock');                  // z -180.5 .. -175.5
+    B.box(4, 9.6, -190, 5, 5, 16, 'rock');                   // z -192.5 .. -187.5
+    B.box(-4, 10.8, -202, 5, 5, 18, 'rock');                 // z -204.5 .. -199.5
+    B.star(-4, 10.0, -178);
+    B.star(4, 11.2, -190);
+    B.star(-4, 12.4, -202);
+    B.starLine(0, 12.6, -184, 4, [0, 0, -1.2], 2.2);
+    B.starLine(0, 13.8, -196, 4, [0, 0, -1.2], 2.2);
+
+    /* --- I: the crater. Checkpoint 2, with a rim you can get onto --------- */
+    B.floor(0, 10.8, -220, 15, 20, 'regolith');              // z -210 .. -230
+    B.checkpoint(0, 10.8, -220);
+    // 3.8u of rim. On earth that is a double jump and a prayer; here it is one
+    // hop, and the level should say so somewhere you can see it.
+    B.wall(-8.5, 14.6, -220, 3, 20, 3.8, 'rock');            // x -10 .. -7
+    B.wall(8.5, 14.6, -220, 3, 20, 3.8, 'rock');             // x   7 .. 10
+    B.crate(-8.5, 14.6, -215, 'star');
+    B.crate(8.5, 14.6, -225, 'life');
+    B.enemy('hopper', 0, 10.8, -224, { axis: 'x', range: 9 });
+    B.weed(-6.4, 10.8, -228, 1.8, 'crystal');
+    B.weed(6.4, 10.8, -212, 2.0, 'crystal');
+    B.starLine(-5, 12.2, -218, 6, [2, 0, 0]);
+
+    /* --- J: the rille. Two carts across a crack in the moon --------------- */
+    B.mover(-6, 10.8, -240, 7, 7, 2, [6, 10.8, -240], 6, 'metal');   // z -243.5 .. -236.5
+    B.mover(6, 10.8, -254, 7, 7, 2, [-6, 10.8, -254], 7, 'metal');   // z -257.5 .. -250.5
+    B.star(-6, 12.2, -240);
+    B.star(6, 12.2, -254);
+    B.starLine(0, 13.6, -247, 4, [0, 0, -1.4], 1.6);
+
+    /* --- K: the far rim ---------------------------------------------------- */
+    B.floor(0, 10.8, -270, 14, 16, 'regolith');              // z -262 .. -278
+    B.enemy('zapdrone', 0, 14.6, -266, { axis: 'x', range: 10 });
+    B.enemy('prickle', 4, 10.8, -274, {});
+    B.crate(-4.6, 10.8, -274, 'plain');
+    B.starLine(-5, 12.2, -270, 6, [2, 0, 0]);
+
+    /* --- L: the staircase. Moon steps — 3u each, one jump each ------------ */
+    B.box(-4, 13.8, -290, 7, 8, 20, 'rock');                 // z -294 .. -286
+    B.box(4, 16.8, -303, 7, 8, 23, 'rock');                  // z -307 .. -299
+    B.box(-4, 19.8, -316, 7, 8, 26, 'rock');                 // z -320 .. -312
+    B.star(-4, 15.4, -290);
+    B.star(4, 18.4, -303);
+    B.star(-4, 21.4, -316);
+    B.starLine(0, 18.4, -296, 3, [0, 0, -1.0], 1.4);
+    B.starLine(0, 21.4, -309, 3, [0, 0, -1.0], 1.4);
+
+    /* --- M: the high plain. Checkpoint 3 ---------------------------------- */
+    B.floor(0, 19.8, -336, 16, 20, 'regolith');              // z -326 .. -346
+    B.checkpoint(0, 19.8, -336);
+    B.enemy('hopper', -5, 19.8, -331, { axis: 'x', range: 6 });
+    B.enemy('hopper', 5, 19.8, -341, { axis: 'x', range: 6 });
+    B.crate(-2.1, 19.8, -336, 'iron');
+    B.crate(0, 19.8, -336, 'iron');
+    B.crate(2.1, 19.8, -336, 'iron');
+    B.crate(0, 19.8, -344, 'heart');
+    B.weed(-7.2, 19.8, -328, 1.7, 'crystal');
+    B.weed(7.2, 19.8, -344, 1.9, 'crystal');
+    B.starLine(-6, 21.2, -333, 7, [2, 0, 0]);
+
+    /* --- N: the drop. Down is cheap here — you fall slowly ---------------- */
+    B.box(0, 16.8, -358, 10, 10, 24, 'rock');                // z -363 .. -353
+    B.box(0, 13.8, -372, 10, 10, 28, 'rock');                // z -377 .. -367
+    B.starLine(0, 19.4, -358, 4, [0, -0.6, -1.2]);
+    B.crate(0, 13.8, -372, 'plain');
+
+    /* --- O: the trench. Narrow, with things hopping in it ----------------- */
+    B.floor(0, 13.8, -392, 9, 22, 'regolith');               // z -381 .. -403
+    B.enemy('hopper', 0, 13.8, -386, { axis: 'x', range: 5 });
+    B.enemy('hopper', 0, 13.8, -398, { axis: 'x', range: 5 });
+    B.wall(-6.5, 17.0, -392, 4, 22, 3.2, 'rock');            // x -8.5 .. -4.5
+    B.wall(6.5, 17.0, -392, 4, 22, 3.2, 'rock');             // x  4.5 .. 8.5
+    B.crate(-6.5, 17.0, -385, 'star');
+    B.crate(6.5, 17.0, -399, 'plain');
+    B.starLine(0, 15.2, -388, 6, [0, 0, -2.2]);
+
+    /* --- P: the long leap. One gap, no help ------------------------------- */
+    // 11u across, against a 13.9u double jump. It is the longest single gap in
+    // the game, it is comfortably inside the arc, and it is only survivable
+    // because of where you are standing — which is the whole joke of the level.
+    B.box(0, 13.8, -414, 8, 8, 28, 'rock');                  // z -418 .. -410
+    B.box(0, 13.8, -433, 8, 8, 28, 'rock');                  // z -437 .. -429
+    B.star(0, 15.2, -414);
+    B.star(0, 15.2, -433);
+    B.starLine(0, 16.4, -419, 5, [0, 0, -1.6], 2.0);   // the arc, drawn
+
+    /* --- Q: the observatory. Checkpoint 4 --------------------------------- */
+    B.floor(0, 13.8, -452, 15, 18, 'regolith');              // z -443 .. -461
+    B.checkpoint(0, 13.8, -452);
+    B.enemy('zapdrone', 0, 17.6, -448, { axis: 'x', range: 11 });
+    B.enemy('hopper', 0, 13.8, -457, { axis: 'x', range: 8 });
+    B.prop(-13, 18.8, -452, 6, 6, 5, 'deck');                // the dish, off-corridor
+    B.prop(-13, 20.4, -452, 2.4, 2.4, 1.6, 'metal');
+    B.crate(-6.2, 13.8, -446, 'star');
+    B.crate(6.2, 13.8, -446, 'plain');
+    B.starLine(-5, 15.2, -452, 6, [2, 0, 0]);
+
+    /* --- R: the spring. Straight up, on a moon ---------------------------- */
+    // A spring throws you at 1.35 of the EARTH jump — src/world.js uses the
+    // global constant and so does the checker — which at moon gravity is 10u
+    // of air. There is a whole column of stars up there because of it.
+    B.floor(0, 13.8, -474, 12, 14, 'regolith');              // z -467 .. -481
+    B.crate(0, 13.8, -474, 'spring');
+    B.starLine(0, 17.0, -474, 6, [0, 1.2, 0]);
+    B.box(-10, 18.6, -474, 5, 6, 10, 'rock');                // z -477 .. -471
+    B.crate(-10, 18.6, -474, 'star');
+
+    /* --- S: the ridge ------------------------------------------------------ */
+    B.box(4, 16.2, -493, 7, 9, 12, 'rock');                  // z -497.5 .. -488.5
+    B.box(-4, 18.6, -508, 7, 9, 14, 'rock');                 // z -512.5 .. -503.5
+    B.star(4, 17.6, -493);
+    B.star(-4, 20.0, -508);
+    B.starLine(0, 20.0, -501, 4, [0, 0, -1.2], 1.8);
+
+    /* --- T: the last plain. Checkpoint 5 ---------------------------------- */
+    B.floor(0, 18.6, -528, 16, 20, 'regolith');              // z -518 .. -538
+    B.checkpoint(0, 18.6, -528);
+    B.enemy('hopper', -5, 18.6, -523, { axis: 'x', range: 6 });
+    B.enemy('hopper', 5, 18.6, -533, { axis: 'x', range: 6 });
+    B.enemy('prickle', 0, 18.6, -528, {});
+    B.crate(-6.4, 18.6, -536, 'iron');
+    B.crate(6.4, 18.6, -536, 'iron');
+    B.weed(-7.2, 18.6, -520, 2.0, 'crystal');
+    B.weed(7.2, 18.6, -520, 1.8, 'crystal');
+    B.starLine(-6, 20.0, -528, 7, [2, 0, 0]);
+
+    /* --- U: three pads home ----------------------------------------------- */
+    B.box(-4, 18.6, -548, 6, 6, 16, 'rock');                 // z -551 .. -545
+    B.box(4, 18.6, -560, 6, 6, 16, 'rock');                  // z -563 .. -557
+    B.box(-4, 18.6, -572, 6, 6, 16, 'rock');                 // z -575 .. -569
+    B.star(-4, 20.0, -548);
+    B.star(4, 20.0, -560);
+    B.star(-4, 20.0, -572);
+
+    /* --- V: the flag ------------------------------------------------------- */
+    B.floor(0, 18.6, -592, 16, 22, 'regolith');              // z -581 .. -603
+    B.weed(-7.2, 18.6, -586, 2.2, 'crystal');
+    B.weed(7.2, 18.6, -586, 2.0, 'crystal');
+    B.crate(-4.4, 18.6, -586, 'star');
+    B.crate(4.4, 18.6, -586, 'plain');
+    B.starLine(-4, 20.0, -590, 5, [2, 0, 0]);
+    B.goal(0, 18.6, -597);
+  },
+},
+{
+  id: 'skyway', name: 'Skyway Scramble', world: 3,
+  sky: [0x2f7fd8, 0xdff1ff], fog: [0xdcefff, 48, 195],
+  sun: 0xfff8e6, sunDir: [-0.42, 1, 0.5], amb: 0x5f7fa0, sunPower: 2.2,
+  camYaw: 0, camOff: [0, 5.8, 12.2], start: [0, 1, 12],
+  hint: 'Floating gardens! Blue crates BOUNCE you. Grey ones need a ground pound (C).',
+  build(B) {
+    // The last running level before the castle, and the one that leans hardest
+    // on things that MOVE: about a third of what you stand on here is going
+    // somewhere. That is deliberate — everything else in World 3 is about a
+    // new verb (the spin, the moon), and this one is about timing.
+    //
+    // The sea is 30u down. Nothing between here and it but weather.
+    B.ground(-30, 'water');
+
+    // Weather. Clouds are pure decoration with no collider at all — see
+    // B.cloud() — which is exactly what they have to be: a cloud you can land
+    // on is a platform, and a platform you can see through is a lie.
+    for (let z = 20; z > -620; z -= 32) {
+      B.cloud(-22 + (z % 11), -9 + ((Math.abs(z) * 3) % 7), z, 2.2 + (Math.abs(z) % 4) / 3, 3.5);
+      B.cloud(24 + (z % 9), -13 + ((Math.abs(z) * 5) % 9), z - 13, 2.6 + (Math.abs(z) % 3) / 2, 4.5);
+      B.cloud((z % 17) - 8, -22 - ((Math.abs(z) * 7) % 6), z - 6, 3.4, 6);
+    }
+    // A few islands out of reach, so the sky reads as somewhere with more in
+    // it than the one path you are on.
+    for (let z = 6; z > -600; z -= 74) {
+      B.prop(-40 + (z % 8), -4, z, 18, 20, 7, 'rock');
+      B.prop(44 + (z % 6), 2, z - 36, 16, 18, 6, 'rock');
+    }
+
+    /* --- A: the first garden ---------------------------------------------- */
+    B.floor(0, 0, 4, 14, 26, 'grass');                       // z 17 .. -9
+    B.starLine(0, 1.2, 10, 5, [0, 0, -2.4]);
+    B.tree(-5.8, 0, 8, .9);
+    B.tree(5.8, 0, 2, .85);
+    B.tree(-5.8, 0, -6, .8);
+    B.enemy('grumblin', 0, 0, -4, { axis: 'x', range: 7 });
+    B.crate(-4.4, 0, -7, 'plain');
+    B.crate(4.4, 0, -7, 'plain');
+
+    /* --- B: the first plank. Narrow, and a long way down ------------------ */
+    B.floor(0, 0, -17, 6, 12, 'wood');                       // z -11 .. -23
+    B.starLine(0, 1.4, -13, 5, [0, 0, -2.0]);
+
+    /* --- C: the bouncy garden. Blue crate, first proper use --------------- */
+    B.floor(0, 0, -32, 13, 14, 'grass');                     // z -25 .. -39
+    B.crate(0, 0, -34, 'spring');
+    B.starLine(0, 3.4, -34, 5, [0, 1.0, 0]);                 // straight up its arc
+    B.tree(-5.4, 0, -28, .8);
+    B.crate(-4.6, 0, -37, 'plain');
+    B.crate(4.6, 0, -37, 'plain');
+    B.enemy('flapjack', 0, 3.2, -30, { axis: 'x', range: 8, bob: 1.4 });
+
+    /* --- D: the ferry ------------------------------------------------------ */
+    B.mover(-5, 0, -46, 6, 6, 2, [5, 0, -46], 5, 'wood');    // z -49 .. -43
+    B.star(-5, 1.4, -46);
+    B.star(5, 1.4, -46);
+
+    /* --- E: the terrace. Checkpoint 1 ------------------------------------- */
+    B.floor(0, 0.8, -60, 12, 14, 'grass');                   // z -53 .. -67
+    B.checkpoint(0, 0.8, -60);
+    B.enemy('hardhat', 0, 0.8, -64, { axis: 'x', range: 7 });
+    B.crate(-4.4, 0.8, -56, 'heart');
+    B.crate(4.4, 0.8, -56, 'plain');
+    B.tree(5.4, 0.8, -65, .9);
+    B.starLine(-4, 2.2, -58, 5, [2, 0, 0]);
+
+    /* --- F: the loft. A spring up to a shelf you cannot jump to ----------- */
+    B.crate(0, 0.8, -62, 'spring');
+    B.box(-10, 4.4, -60, 6, 8, 12, 'rock');                  // x -13 .. -7, z -64 .. -56
+    B.crate(-10, 4.4, -62, 'star');
+    B.starLine(-10, 5.8, -57, 3, [0, 0, -1.6]);
+
+    /* --- G: three planks with gaps in them -------------------------------- */
+    B.floor(0, 0.8, -74, 6, 8, 'wood');                      // z -70 .. -78
+    B.floor(0, 0.8, -86, 6, 8, 'wood');                      // z -82 .. -90
+    B.floor(0, 0.8, -98, 6, 8, 'wood');                      // z -94 .. -102
+    B.star(0, 2.2, -74);
+    B.star(0, 2.2, -86);
+    B.star(0, 2.2, -98);
+    B.starLine(0, 3.0, -80, 3, [0, 0, -0.8], 1.1);
+    B.starLine(0, 3.0, -92, 3, [0, 0, -0.8], 1.1);
+
+    /* --- H: the orchard. Wide, three tenants ------------------------------ */
+    B.floor(0, 0.8, -114, 16, 18, 'grass');                  // z -105 .. -123
+    B.tree(-6.4, 0.8, -108, 1.0);
+    B.tree(6.4, 0.8, -108, .95);
+    B.tree(-6.4, 0.8, -120, .9);
+    B.enemy('grumblin', -4, 0.8, -113, { axis: 'z', range: 6 });
+    B.enemy('hardhat', 4, 0.8, -113, { axis: 'z', range: 6 });
+    B.enemy('flapjack', 0, 4.2, -119, { axis: 'x', range: 9, bob: 1.5 });
+    B.crateRow(-2.1, 0.8, -110, 3, 'plain');
+    B.starLine(-5, 2.2, -116, 6, [2, 0, 0]);
+
+    /* --- I: the lift. A platform that goes UP, and a shelf at the top ----- */
+    // Movers carry you: `player.riding` is set from whatever you were standing
+    // on last frame, so a vertical one is a lift rather than a thing that
+    // slides out from under you.
+    B.mover(0, 0.8, -132, 6, 6, 2, [0, 5.6, -132], 6, 'wood');    // z -135 .. -129
+    B.star(0, 2.2, -132);
+    B.star(0, 5.0, -132);
+    B.floor(0, 5.6, -146, 12, 14, 'grass');                  // z -139 .. -153
+    B.crate(-4.2, 5.6, -142, 'star');
+    B.crate(4.2, 5.6, -142, 'plain');
+    B.tree(-5.4, 5.6, -151, .85);
+    B.starLine(-4, 7.0, -148, 5, [2, 0, 0]);
+
+    /* --- J: the grey crates. Ground pound, or go round -------------------- */
+    B.floor(0, 5.6, -164, 13, 12, 'grass');                  // z -158 .. -170
+    B.crate(-3.2, 5.6, -164, 'iron');
+    B.crate(0, 5.6, -164, 'iron');
+    B.crate(3.2, 5.6, -164, 'iron');
+    B.crate(0, 5.6, -168, 'plain');
+    B.starLine(-4, 9.4, -164, 5, [2, 0, 0]);
+
+    /* --- K: two ferries, opposite ways ------------------------------------ */
+    B.mover(-6, 5.6, -179, 6, 6, 2, [6, 5.6, -179], 5, 'wood');   // z -182 .. -176
+    B.mover(6, 5.6, -191, 6, 6, 2, [-6, 5.6, -191], 6, 'wood');   // z -194 .. -188
+    B.star(-6, 7.0, -179);
+    B.star(6, 7.0, -191);
+    B.starLine(0, 8.0, -185, 3, [0, 0, -1.2], 1.2);
+
+    /* --- L: the mid-air garden. Checkpoint 2 ------------------------------ */
+    B.floor(0, 5.6, -206, 15, 18, 'grass');                  // z -197 .. -215
+    B.checkpoint(0, 5.6, -206);
+    B.enemy('hardhat', -5, 5.6, -202, { axis: 'x', range: 6 });
+    B.enemy('prickle', 5, 5.6, -210, {});
+    B.tree(-6.8, 5.6, -212, 1.1);
+    B.tree(6.8, 5.6, -200, 1.0);
+    B.crate(0, 5.6, -213, 'heart');
+    B.starLine(-5, 7.0, -206, 6, [2, 0, 0]);
+
+    /* --- M: the powder shed ------------------------------------------------ */
+    B.floor(0, 5.6, -226, 12, 12, 'grass');                  // z -220 .. -232
+    B.crate(-2.1, 5.6, -226, 'plain');
+    B.crate(0, 5.6, -226, 'tnt');
+    B.crate(2.1, 5.6, -226, 'plain');
+    B.crate(-1.05, 7.4, -226, 'star');
+    B.crate(1.05, 7.4, -226, 'iron');
+    B.crate(0, 9.2, -226, 'plain');
+    B.crate(0, 5.6, -223, 'plain');
+    B.crate(0, 5.6, -229, 'plain');
+
+    /* --- N: the staircase of planks --------------------------------------- */
+    B.floor(-4, 7.2, -242, 7, 8, 'wood');                    // z -238 .. -246
+    B.floor(4, 8.8, -254, 7, 8, 'wood');                     // z -250 .. -258
+    B.floor(-4, 10.4, -266, 7, 8, 'wood');                   // z -262 .. -270
+    B.star(-4, 8.6, -242);
+    B.star(4, 10.2, -254);
+    B.star(-4, 11.8, -266);
+    B.starLine(0, 10.6, -248, 3, [0, 0, -0.8], 1.0);
+    B.starLine(0, 12.2, -260, 3, [0, 0, -0.8], 1.0);
+
+    /* --- O: the high garden ------------------------------------------------ */
+    B.floor(0, 10.4, -284, 16, 20, 'grass');                 // z -274 .. -294
+    B.enemy('flapjack', -4, 13.8, -279, { axis: 'x', range: 8, bob: 1.5 });
+    B.enemy('flapjack', 4, 13.8, -289, { axis: 'x', range: 8, bob: 1.5 });
+    B.enemy('grumblin', 0, 10.4, -284, { axis: 'x', range: 9 });
+    B.tree(-7.0, 10.4, -277, 1.2);
+    B.tree(7.0, 10.4, -291, 1.1);
+    B.crate(-6.4, 10.4, -291, 'star');
+    B.starLine(-6, 11.8, -284, 7, [2, 0, 0]);
+
+    /* --- P: the long ferry. One platform, a long way ---------------------- */
+    B.mover(0, 10.4, -300, 7, 7, 2, [0, 10.4, -330], 9, 'wood');  // z -303.5 .. -296.5
+    B.star(0, 11.8, -300);
+    B.star(0, 11.8, -330);
+    B.floor(0, 10.4, -344, 12, 14, 'grass');                 // z -337 .. -351
+    B.crate(-4.2, 10.4, -340, 'plain');
+    B.crate(4.2, 10.4, -340, 'heart');
+    B.tree(5.4, 10.4, -349, .9);
+    B.starLine(-4, 11.8, -346, 5, [2, 0, 0]);
+
+    /* --- Q: the drop, and a spring to get back up ------------------------- */
+    B.floor(0, 7.6, -364, 12, 14, 'grass');                  // z -357 .. -371
+    B.crate(0, 7.6, -366, 'spring');
+    B.starLine(0, 10.6, -366, 5, [0, 1.0, 0]);
+    B.box(9, 11.2, -364, 6, 8, 14, 'rock');                  // x 6 .. 12, z -368 .. -360
+    B.crate(9, 11.2, -364, 'star');
+    B.enemy('hardhat', 0, 7.6, -369, { axis: 'x', range: 7 });
+
+    /* --- R: the gauntlet of planks. Checkpoint 3 -------------------------- */
+    B.floor(0, 7.6, -384, 6, 10, 'wood');                    // z -379 .. -389
+    B.checkpoint(0, 7.6, -384);
+    B.floor(-5, 7.6, -398, 6, 10, 'wood');                   // z -393 .. -403
+    B.floor(5, 7.6, -412, 6, 10, 'wood');                    // z -407 .. -417
+    B.star(0, 9.0, -384);
+    B.star(-5, 9.0, -398);
+    B.star(5, 9.0, -412);
+    B.starLine(0, 9.8, -391, 3, [0, 0, -1.0], 1.1);
+    B.starLine(0, 9.8, -405, 3, [0, 0, -1.0], 1.1);
+
+    /* --- S: the last big garden ------------------------------------------- */
+    B.floor(0, 7.6, -432, 16, 20, 'grass');                  // z -422 .. -442
+    B.enemy('hardhat', -5, 7.6, -427, { axis: 'x', range: 6 });
+    B.enemy('hardhat', 5, 7.6, -437, { axis: 'x', range: 6 });
+    B.enemy('flapjack', 0, 11.0, -432, { axis: 'x', range: 10, bob: 1.6 });
+    B.tree(-7.2, 7.6, -425, 1.3);
+    B.tree(7.2, 7.6, -439, 1.2);
+    B.crateRow(-2.1, 7.6, -424, 3, 'plain');
+    B.crate(0, 7.6, -440, 'life');
+    B.starLine(-6, 9.0, -434, 7, [2, 0, 0]);
+
+    /* --- T: three lifts, each higher than the last ------------------------ */
+    B.mover(-4, 7.6, -452, 6, 6, 2, [-4, 10.0, -452], 5, 'wood');   // z -455 .. -449
+    B.mover(4, 10.0, -464, 6, 6, 2, [4, 12.4, -464], 5, 'wood');    // z -467 .. -461
+    B.mover(-4, 12.4, -476, 6, 6, 2, [-4, 14.8, -476], 5, 'wood');  // z -479 .. -473
+    B.star(-4, 9.0, -452);
+    B.star(4, 11.4, -464);
+    B.star(-4, 13.8, -476);
+
+    /* --- U: the summit garden. Checkpoint 4 ------------------------------- */
+    B.floor(0, 14.8, -494, 15, 18, 'grass');                 // z -485 .. -503
+    B.checkpoint(0, 14.8, -494);
+    B.enemy('grumblin', 0, 14.8, -490, { axis: 'x', range: 9 });
+    B.enemy('prickle', -4, 14.8, -500, {});
+    B.tree(-6.8, 14.8, -488, 1.2);
+    B.tree(6.8, 14.8, -500, 1.1);
+    B.crate(5.0, 14.8, -500, 'star');
+    B.starLine(-5, 16.2, -494, 6, [2, 0, 0]);
+
+    /* --- V: the last ferries ---------------------------------------------- */
+    B.mover(-6, 14.8, -515, 6, 6, 2, [6, 14.8, -515], 5, 'wood');   // z -518 .. -512
+    B.mover(6, 14.8, -527, 6, 6, 2, [-6, 14.8, -527], 6, 'wood');   // z -530 .. -524
+    B.star(-6, 16.2, -515);
+    B.star(6, 16.2, -527);
+    B.starLine(0, 17.2, -521, 3, [0, 0, -1.2], 1.2);
+
+    /* --- W: the fuse in the sky ------------------------------------------- */
+    B.floor(0, 14.8, -542, 13, 14, 'grass');                 // z -535 .. -549
+    B.crate(-2.1, 14.8, -542, 'plain');
+    B.crate(0, 14.8, -542, 'tnt');
+    B.crate(2.1, 14.8, -542, 'star');
+    B.crate(-4.2, 14.8, -542, 'plain');
+    B.crate(4.2, 14.8, -542, 'plain');
+    B.crate(0, 14.8, -545, 'iron');
+    B.starLine(-4, 16.2, -538, 5, [2, 0, 0]);
+
+    /* --- X: three planks home --------------------------------------------- */
+    B.floor(-4, 14.8, -560, 6, 10, 'wood');                  // z -555 .. -565
+    B.floor(4, 14.8, -574, 6, 10, 'wood');                   // z -569 .. -579
+    B.star(-4, 16.2, -560);
+    B.star(4, 16.2, -574);
+    B.starLine(0, 17.0, -567, 3, [0, 0, -1.0], 1.1);
+
+    /* --- Y: the last garden ------------------------------------------------ */
+    B.floor(0, 14.8, -596, 16, 22, 'grass');                 // z -585 .. -607
+    B.tree(-7.2, 14.8, -590, 1.4);
+    B.tree(7.2, 14.8, -590, 1.3);
+    B.tree(-7.2, 14.8, -604, 1.1);
+    B.crate(-4.4, 14.8, -590, 'star');
+    B.crate(4.4, 14.8, -590, 'plain');
+    B.starLine(-4, 16.2, -594, 5, [2, 0, 0]);
+    B.goal(0, 14.8, -601);
+  },
+},
+{
+  id: 'castle', name: "King Dad's Castle", world: 3,
   sky: [0x2e1550, 0xff9a5c], fog: [0xf08a62, 45, 200],
   sun: 0xffd9a8, sunDir: [-0.45, 1, 0.5], amb: 0x3b2a4a,
   camYaw: 0, camOff: [0, 5.8, 13], start: [0, 0, 14],
@@ -1877,65 +2667,97 @@ export const HUB = {
   // Borrowed until the hub gets a theme of its own; `music` overrides the
   // usual "track is named after the level" rule.
   music: 'jungle',
-  sky: [0x4aa8ff, 0xdff1ff], fog: [0xd6ecff, 60, 210],
+  sky: [0x4aa8ff, 0xdff1ff], fog: [0xd6ecff, 60, 230],
   sun: 0xfff4dd, sunDir: [-0.4, 1, 0.55], amb: 0x4e6a48,
-  // Pulled back for the seventh door: at [0,7,14] the two ends of the arc ran
-  // off the sides of the screen, and a level select you have to walk around to
-  // read is not a level select.
-  camYaw: 0, camOff: [0, 8.6, 17], start: [0, 0, 9],
-  hint: 'Walk into a ring to play that level!',
+  // Ten doors do not fit on one arc at a readable size, so the island grew a
+  // TERRACE and the camera came back with it. The rule the offset is solving
+  // is unchanged from the seven-door version: every placard has to be legible
+  // from the spawn, because a level select you have to walk around to read is
+  // not a level select.
+  camYaw: 0, camOff: [0, 11.5, 23], start: [0, 0, 7],
+  hint: 'Walk into a ring to play that level! World 3 is up the steps.',
   build(B) {
     B.ground(-12, 'water');                         // the island sits in the sea
-    // Deep enough that the camera never sails off the back of it: at the spawn
-    // the boom sits at z+14, and an island ending at z 16 put its own cliff
-    // face across the bottom half of the screen.
-    B.floor(0, 0, -3, 36, 48, 'grass');             // x -18..18, z -27 .. 21
+    // Bigger than it was: x -22..22, z -34..22. Deep at the front for the same
+    // reason as before — the camera boom sits behind the spawn, and an island
+    // that ends too soon puts its own cliff face across the bottom of the shot.
+    // The front edge is at z 25 for a reason that is pure camera: the boom
+    // sits 25u behind Orion, so at the spawn the front rail is 6u in front of
+    // the lens — which is BELOW the bottom of a frustum tilted 24 degrees down,
+    // and therefore out of shot. Bring the edge any closer and the rail parks
+    // itself across the bottom third of the level select. (keepOrionInSight
+    // does not save you here: the rail is under the sightline, not across it.)
+    B.floor(0, 0, -4.5, 44, 59, 'grass');           // x -22..22, z -34 .. 25
 
-    // The seven doorways, in an arc so none of them hides behind another and
-    // the camera — which is fixed — sees the whole set from the spawn. Depth
-    // does the separating as much as width: the middle doors sit further back,
-    // so perspective pulls their placards apart on screen.
-    B.portal(-14.5, 0, -4, 0);
-    B.portal(-10, 0, -9.5, 1);
-    B.portal(-5.2, 0, -13.5, 2);
-    B.portal(0, 0, -16, 3);
-    B.portal(5.2, 0, -13.5, 4);
-    B.portal(10, 0, -9.5, 5);
-    B.portal(14.5, 0, -4, 6);
+    // The terrace. World 3 stands on it, which is the whole point: the map
+    // should say "these are the new ones" before you have read a single sign,
+    // and height says it better than any label.
+    B.box(0, 2.2, -25, 40, 14, 8, 'rock');          // x -20..20, z -32 .. -18
+    // …and one step in the middle of it, so getting up there is walking rather
+    // than a jump you have to aim. A 2.2 step is exactly a single jump, which
+    // is fine for a level and mean for a menu.
+    B.box(0, 1.1, -16.5, 12, 3, 6, 'rock');         // x -6..6, z -18 .. -15
 
-    // Something to look at, and a reason the island reads as a place. All of
-    // it is clear of the walking line between the spawn and the arc.
-    // No stars out here: a star you can collect on the map that counts for
-    // nothing and never comes back is a promise the hub cannot keep.
-    for (const [x, z, s] of [[-16.5, 14, .9], [16.5, 14, .85], [-17, 6, .8], [17, 6, .75],
-                             [-16, -20, .8], [16, -20, .85], [-8, 18, .7], [8, 18, .7]])
+    /* ---- the doors ----
+     * Front lawn: Worlds 1 and 2, six of them, on an arc so perspective pulls
+     * the placards apart. Terrace: World 3, four of them, STAGGERED against
+     * the gaps in the front row — line them up and every back placard hides
+     * behind a front one from the only angle this camera has.
+     */
+    B.portal(-18.5, 0, -2, 0);
+    B.portal(-11.2, 0, -6, 1);
+    B.portal(-3.8, 0, -8.5, 2);
+    B.portal(3.8, 0, -8.5, 3);
+    B.portal(11.2, 0, -6, 4);
+    B.portal(18.5, 0, -2, 5);
+    B.portal(-13.5, 2.2, -25, 6);
+    B.portal(-4.5, 2.2, -28.5, 7);
+    B.portal(4.5, 2.2, -28.5, 8);
+    B.portal(13.5, 2.2, -25, 9);
+
+    // Something to look at, all of it clear of the walk between the spawn and
+    // the doors. No stars out here: a star you can collect on the map that
+    // counts for nothing and never comes back is a promise the hub can't keep.
+    // Nothing on the centre line, ever: a tree at x 0 in front of the spawn
+    // sits squarely between the camera and Orion, and it is the one occluder
+    // keepOrionInSight cannot clear — a trunk collider is `scenery`, so the
+    // art hanging off it was never in `solids` to be ghosted.
+    for (const [x, z, s] of [[-20, 10, .95], [20, 10, .9], [-20.5, 2, .85], [20.5, 2, .8],
+                             [-20, -12, .8], [20, -12, .85], [-13, 16, .75], [13, 16, .75],
+                             [-20.5, 20, .7], [20.5, 20, .7]])
       B.tree(x, 0, z, s);
-    B.wall(-16, 2.2, -16, 4, 4, 2.2, 'rock');
-    B.wall(16, 2.2, -16, 4, 4, 2.2, 'rock');
+    // Palms up on the terrace, at its back corners, behind the placards.
+    B.tree(-17.5, 2.2, -31, .85);
+    B.tree(17.5, 2.2, -31, .8);
+    B.wall(-20, 2.2, -8, 4, 4, 2.2, 'rock');
+    B.wall(20, 2.2, -8, 4, 4, 2.2, 'rock');
 
     // A wall all the way round. You cannot fall off the map — there is nothing
     // to be gained by dying on the level select, and a kid who walks off the
     // edge while reading the signs has been punished for reading the signs.
-    // The front rail spends most of its life between the camera and Orion, and
+    // The front rail spends most of its life between the camera and Orion and
     // is simply not drawn while it does; that is what keepOrionInSight is for.
     const R = 2.6;                                  // rail height — waist high
-    B.wall(0, R, -27.5, 37, 1.5, R, 'rock');        // back
-    B.wall(0, R, 21.5, 37, 1.5, R, 'rock');         // front
-    B.wall(-18.5, R, -3, 1.5, 47, R, 'rock');       // left
-    B.wall(18.5, R, -3, 1.5, 47, R, 'rock');        // right
+    B.wall(0, R, -34.75, 45, 1.5, R, 'rock');       // back
+    B.wall(0, R, 25.75, 45, 1.5, R, 'rock');        // front
+    // 55 deep, not 57: at 57 the side rails run INTO the back and front ones
+    // and four coplanar corners z-fight. The invisible barrier below is what
+    // actually seals them, so the visible rail can afford the gap.
+    B.wall(-22.75, R, -4.5, 1.5, 57, R, 'rock');    // left
+    B.wall(22.75, R, -4.5, 1.5, 57, R, 'rock');     // right
     // …and the part that actually holds you in. The rail is scenery: a double
-    // jump clears 4.08u, and off the 2.2u outcrops that is 6.3u, so the real
+    // jump clears 4.08u, and off the 2.2u terrace that is 6.3u, so the real
     // barrier goes to 9 and is invisible rather than walling the sea out.
     const H = 9;
-    B.barrier(0, H, -27.5, 37, 1.5, H);
-    B.barrier(0, H, 21.5, 37, 1.5, H);
-    B.barrier(-18.5, H, -3, 1.5, 47, H);
-    B.barrier(18.5, H, -3, 1.5, 47, H);
+    B.barrier(0, H, -34.75, 45, 1.5, H);
+    B.barrier(0, H, 25.75, 45, 1.5, H);
+    B.barrier(-22.75, H, -4.5, 1.5, 61, H);
+    B.barrier(22.75, H, -4.5, 1.5, 61, H);
 
     // Distant palms on the water, never solid.
-    for (let z = 20; z > -60; z -= 14) {
-      B.tree(-34 + (z % 6), -12, z, 2.0, false);
-      B.tree(35 + (z % 5), -12, z - 6, 2.2, false);
+    for (let z = 24; z > -70; z -= 14) {
+      B.tree(-38 + (z % 6), -12, z, 2.0, false);
+      B.tree(39 + (z % 5), -12, z - 6, 2.2, false);
     }
   },
 };

@@ -131,6 +131,40 @@ const RECIPES = {
     const a = hex(0x0e5c8a), b = hex(0x3fb6d8);
     return paint(256, (x, y) => mix(a, b, n(x, y)));
   },
+  // --- the desert set ---
+  // Wind-cut sandstone: horizontal strata, because a mesa reads as a mesa from
+  // the banding and from nothing else. The bands wobble with the noise rather
+  // than running dead straight — a ruled line looks like a barcode at this
+  // texel density, which is what the first pass looked like.
+  sandstone() {
+    const n = fbm(307, 4, 5), grit = fbm(311, 2, 32);
+    const a = hex(0x9c5a34), b = hex(0xd99b5c), c = hex(0xf0cf9a);
+    return paint(256, (x, y) => {
+      const band = Math.sin((y * 7 + n(x, y) * 2.4) * Math.PI) * .5 + .5;
+      const base = mix(a, b, band);
+      return mix(base, c, Math.max(0, n(x, y) - .55) * 1.5)
+        .map(k => k * (0.92 + 0.16 * grit(x, y)));
+    });
+  },
+  // --- the moon set ---
+  // Regolith: grey dust with craters bitten out of it. The craters are the
+  // whole texture — flat grey noise at this scale is concrete, and a moon made
+  // of concrete is a car park.
+  regolith() {
+    const n = fbm(401, 5, 6), pit = fbm(409, 3, 11), grit = fbm(419, 2, 48);
+    const a = hex(0x6a6f88), b = hex(0xb4b9cf);
+    return paint(256, (x, y) => {
+      const v = n(x, y), p = pit(x, y);
+      // A crater is a shallow bowl with a slightly brighter rim. The numbers
+      // are deliberately gentle: the first pass used a hard dark/light split
+      // and a wide low band, and 256px of that at platform scale is not the
+      // moon, it is camouflage netting. Small pits, small contrast, and the
+      // fine grit on top is what actually sells the dust.
+      const rim = Math.abs(p - .32) < .03 ? 1.10 : (p < .32 ? .86 : 1);
+      return mix(a, b, v * .7 + .15)
+        .map(k => Math.min(255, k * rim * (0.94 + 0.12 * grit(x, y))));
+    });
+  },
   // --- the flight level's industrial set ---
   // Ice pads and grey rock in a space station read as a glacier someone parked
   // a gate on. These two replace them, and the light/dark split is not
@@ -336,6 +370,66 @@ const SYMBOL = {
     g.beginPath(); g.moveTo(cx - 30 * u, 92 * u); g.lineTo(cx + 30 * u, 92 * u);
     g.strokeStyle = '#0b3a5c'; g.lineWidth = 14 * u; g.stroke();
     g.strokeStyle = '#dff2ff'; g.lineWidth = 7 * u; g.stroke();
+  },
+  // A lit fuse. This one takes its neighbours with it, so the stencil has to
+  // say DANGER from across the level: a fat sputtering wick, not a word.
+  tnt(g, S) {
+    const u = S / 100, cx = S / 2;
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    // The stick: three bands, because one red rectangle is a brick.
+    g.fillStyle = '#c62b2b';
+    g.fillRect(cx - 30 * u, 40 * u, 60 * u, 50 * u);
+    g.fillStyle = '#f4e2c0';
+    for (const y of [50, 74]) g.fillRect(cx - 30 * u, y * u, 60 * u, 9 * u);
+    g.strokeStyle = '#4a1010'; g.lineWidth = 5 * u;
+    g.strokeRect(cx - 30 * u, 40 * u, 60 * u, 50 * u);
+    // The fuse, curling off to one side so it doesn't read as an aerial.
+    g.beginPath();
+    g.moveTo(cx, 40 * u);
+    g.bezierCurveTo(cx + 4 * u, 26 * u, cx + 26 * u, 26 * u, cx + 24 * u, 12 * u);
+    g.strokeStyle = '#6b5a3a'; g.lineWidth = 7 * u; g.stroke();
+    // The spark.
+    for (const [r, c] of [[13, '#ff8a3d'], [7, '#fff3b0']]) {
+      g.beginPath(); g.arc(cx + 24 * u, 10 * u, r * u, 0, Math.PI * 2);
+      g.fillStyle = c; g.fill();
+    }
+  },
+  // Rivets and a band: this one shrugs off a spin and a stomp. Only a ground
+  // pound opens it, so the stencil is the heaviest thing in the set.
+  iron(g, S) {
+    const u = S / 100, cx = S / 2, cy = S / 2;
+    g.fillStyle = '#7d8697';
+    g.fillRect(18 * u, 18 * u, 64 * u, 64 * u);
+    g.strokeStyle = '#39404f'; g.lineWidth = 7 * u;
+    g.strokeRect(18 * u, 18 * u, 64 * u, 64 * u);
+    g.fillStyle = '#39404f';                          // the strap
+    g.fillRect(18 * u, cy - 9 * u, 64 * u, 18 * u);
+    g.fillStyle = '#c7cedb';
+    for (const x of [30, cx / u, 70]) for (const y of [28, 72]) {
+      g.beginPath(); g.arc(x * u, y * u, 6 * u, 0, Math.PI * 2); g.fill();
+    }
+    // A down arrow through the strap: the crate tells you which button.
+    g.strokeStyle = '#ffd23f'; g.lineWidth = 9 * u; g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(cx, cy - 20 * u); g.lineTo(cx, cy + 18 * u);
+    g.moveTo(cx - 14 * u, cy + 4 * u); g.lineTo(cx, cy + 18 * u);
+    g.lineTo(cx + 14 * u, cy + 4 * u);
+    g.stroke();
+  },
+  // A heart. Same shape as the HUD, on purpose — a kid should not have to be
+  // told what refills the hearts.
+  heart(g, S) {
+    const u = S / 100, cx = S / 2;
+    g.beginPath();
+    g.moveTo(cx, 84 * u);
+    g.bezierCurveTo(cx - 52 * u, 52 * u, cx - 34 * u, 14 * u, cx, 34 * u);
+    g.bezierCurveTo(cx + 34 * u, 14 * u, cx + 52 * u, 52 * u, cx, 84 * u);
+    g.closePath();
+    g.fillStyle = '#ff5d73'; g.fill();
+    g.strokeStyle = '#6b1224'; g.lineWidth = 6 * u; g.lineJoin = 'round'; g.stroke();
+    g.beginPath();                                   // the shine
+    g.ellipse(cx - 15 * u, 44 * u, 7 * u, 11 * u, -.5, 0, Math.PI * 2);
+    g.fillStyle = 'rgba(255,255,255,.75)'; g.fill();
   },
 };
 

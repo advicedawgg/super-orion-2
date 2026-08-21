@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { tex, skyTexture, crateFace, signTexture } from './art.js';
 import { bounds, T } from './physics.js';
-import { buildLevel, killPlane, CRATE_SIZE, BODY } from './builder.js';
+import { buildLevel, killPlane, CRATE_SIZE, BODY, CRATE_STARS, TNT_R } from './builder.js';
 
 /* ------------------------------------------------------ geometry helpers */
 const geoCache = new Map();
@@ -29,6 +29,14 @@ function tiledBox(w, h, d, scale) {
 }
 
 const matCache = new Map();
+/** The three tiers of a pine's canopy. Shared, because the batched backdrop
+ *  and a hand-placed tree have to be the same green. */
+const LEAF = [0x2f8b3a, 0x37a044, 0x45b551];
+function leafMat(i) {
+  const key = '#leaf' + i;
+  if (!matCache.has(key)) matCache.set(key, new THREE.MeshLambertMaterial({ color: LEAF[i] }));
+  return matCache.get(key);
+}
 function surface(name) {
   if (!matCache.has(name)) matCache.set(name, new THREE.MeshLambertMaterial({ map: tex(name) }));
   return matCache.get(name);
@@ -47,6 +55,13 @@ const SURFACE = {
   // bolted onto structure rather than a floating slab of chequer plate.
   deck: { top: 'deck', side: 'panel' },
   panel: { top: 'panel', side: 'panel' },
+  // The desert. Sand caps sandstone the way turf caps dirt — same trick, same
+  // reason: what you can LAND on has to be a different colour from the cliff
+  // it is cut out of, or a mesa is one brown shape with a kid lost on it.
+  sandstone: { top: 'sandstone', side: 'sandstone' },
+  mesa: { top: 'sand', side: 'sandstone', cap: true },
+  // The moon. Dust on top, bare rock down the side.
+  regolith: { top: 'regolith', side: 'rock', cap: true },
 };
 const CAP = 0.45;   // thickness of the turf layer
 const LIP = 0.18;   // how far it overhangs the cliff face
@@ -72,6 +87,7 @@ export class World {
     this.scene = scene;
     this.group = new THREE.Group(); scene.add(this.group);
     this.time = 0;
+    this.clangT = 0;                          // throttles the iron-crate clang
     this.fx = () => { };                      // main.js swaps in the real one
 
     scene.background = skyTexture(def.sky[0], def.sky[1]);
@@ -89,13 +105,17 @@ export class World {
     if (data.ground) this.addGround(data.ground, def);
     // Crates and tree trunks already have their own art; they only need colliders.
     for (const s of this.solids) if (!s.crate && !s.scenery) this.addSolidMesh(s);
+    // Props are drawn exactly like a solid and are in no other list: no
+    // collision, not a platform, not the checker's problem. See B.prop().
+    for (const p of data.props || []) this.addSolidMesh(p);
     this.crates = data.crates.map(c => this.addCrate(c));
     this.stars = data.stars.map(s => this.addStar(s));
     this.enemies = data.enemies.map(e => this.addEnemy(e));
     this.checkpoints = data.checkpoints.map(c => this.addCheckpoint(c));
     this.gates = (data.gates || []).map(g => this.addGate(g));
     this.flora = [];                          // sway pivots; see addKelp
-    for (const t of data.trees) this.addTree(t);
+    this.plant(data.trees);
+    this.clouds = (data.clouds || []).map(c => this.addCloud(c));
     this.portals = (data.portals || []).map(p => this.addPortal(p));
     if (this.goalPos) this.addGoal();
 
@@ -172,7 +192,9 @@ export class World {
     const m = new THREE.Mesh(starGeometry(), new THREE.MeshLambertMaterial({ color: 0xffd23f, emissive: 0x7a5a00 }));
     m.position.set(p.x, p.y, p.z); m.castShadow = true;
     this.group.add(m);
-    return { mesh: m, home: p.y, alive: true };
+    // `home` is where it lives (the magnet has to be able to put it back);
+    // `phase` de-syncs the bob so a row of them doesn't pulse as one bar.
+    return { mesh: m, home: new THREE.Vector3(p.x, p.y, p.z), phase: p.y + p.z * .3, alive: true };
   }
 
   addCrate(c) {
@@ -188,9 +210,12 @@ export class World {
     const top = topper(c.kind);
     if (top) m.add(top);
     this.group.add(m);
+    // The tnt spark is the only part of a crate that animates. Collected here
+    // rather than searched for every frame.
+    const spark = top ? top.children.filter(o => o.name === 'spark') : [];
     // settling=true on the first frame so an authored stack validates itself,
     // and so a crate placed over nothing falls instead of hanging there.
-    return { s, mesh: m, kind: c.kind, alive: true, vy: 0, settling: true };
+    return { s, mesh: m, kind: c.kind, alive: true, vy: 0, settling: true, spark };
   }
 
   addEnemy(d) {
@@ -229,7 +254,10 @@ export class World {
     eye.position.y = 2.1; g.add(eye);
     const base = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.8, .35, 12), surface('rock'));
     base.position.y = .17; base.castShadow = base.receiveShadow = true; g.add(base);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 1.5),
+    // 5.2 wide, not 4.4. Ten doors put the far ones ~30u from the lens and a
+    // name you cannot read is a door you will not pick; the arc is spaced at
+    // 7.3u, which leaves room for this and no more.
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 1.77),
       new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide }));
     sign.position.y = 4.5; g.add(sign);
     this.group.add(g);
@@ -316,6 +344,8 @@ export class World {
     else if (t.kind === 'coral') this.addCoral(g, rnd);
     else if (t.kind === 'fan') this.addFan(g, rnd);
     else if (t.kind === 'crystal') this.addCrystal(g, rnd);
+    else if (t.kind === 'cactus') this.addCactus(g, rnd);
+    else if (t.kind === 'shrub') this.addShrub(g, rnd);
     else this.addPine(g);
 
     g.rotation.y = seed % 6.28;                      // varied but deterministic
@@ -333,15 +363,146 @@ export class World {
     return new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: .28, ...extra });
   }
 
+  /**
+   * Plant the level's flora.
+   *
+   * Backdrop pines — which are most of them — go through ONE InstancedMesh per
+   * part instead of a four-mesh Group each. Jungle Jog plants 160 of them:
+   * that was ~640 draw calls of scenery you cannot touch, against ~800 for the
+   * entire rest of the level, and it was the first thing on the list to fix if
+   * the Steam Deck ever struggled. Everything else here is a one-off and stays
+   * a real group.
+   */
+  plant(trees) {
+    const backdrop = [];
+    for (const t of trees) {
+      if (!t.solid && (t.kind || 'pine') === 'pine') backdrop.push(t);
+      else this.addTree(t);
+    }
+    if (backdrop.length) this.addPineBatch(backdrop);
+  }
+
+  /**
+   * The batched backdrop. Same four parts `addPine` builds, same deterministic
+   * per-tree spin, composed straight into instance matrices.
+   *
+   * These do NOT cast shadows, and that is the point of doing it here rather
+   * than in addPine: an InstancedMesh is culled as one object, so a batch that
+   * spans a 660u level is inside the shadow frustum somewhere for the whole
+   * level and would render all 160 trees into the shadow map every frame. They
+   * stand 20u below the play space on a floor you can barely see. Nothing is
+   * lost and the shadow pass gets its budget back.
+   */
+  addPineBatch(trees) {
+    if (!geoCache.has('#pinecone0'))
+      for (let i = 0; i < 3; i++)
+        geoCache.set('#pinecone' + i, new THREE.ConeGeometry(2.3 - i * .55, 1.9, 6));
+    const parts = [[tiledBox(.6, 3.4, .6, 2), surface('wood'), 1.7]];
+    for (let i = 0; i < 3; i++)
+      parts.push([geoCache.get('#pinecone' + i), leafMat(i), 3.1 + i * 1.05]);
+
+    const m = new THREE.Matrix4(), local = new THREE.Matrix4();
+    const q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+    const at = new THREE.Vector3(), sc = new THREE.Vector3();
+    for (const [geo, mat, y] of parts) {
+      const im = new THREE.InstancedMesh(geo, mat, trees.length);
+      im.castShadow = false; im.receiveShadow = true;
+      trees.forEach((t, i) => {
+        // The same seed addTree() uses, so a batched tree stands exactly where
+        // an unbatched one would and a screenshot doesn't move.
+        q.setFromAxisAngle(up, Math.abs(t.x * 7.3 + t.z * 3.1) % 6.28);
+        m.compose(at.set(t.x, t.y, t.z), q, sc.setScalar(t.s));
+        im.setMatrixAt(i, m.multiply(local.makeTranslation(0, y, 0)));
+      });
+      im.instanceMatrix.needsUpdate = true;
+      this.group.add(im);
+    }
+  }
+
   addPine(g) {
     const trunk = new THREE.Mesh(tiledBox(.6, 3.4, .6, 2), surface('wood'));
     trunk.position.y = 1.7; g.add(trunk);
     for (let i = 0; i < 3; i++) {
-      const leaf = new THREE.Mesh(new THREE.ConeGeometry(2.3 - i * .55, 1.9, 6),
-        new THREE.MeshLambertMaterial({ color: [0x2f8b3a, 0x37a044, 0x45b551][i] }));
+      const leaf = new THREE.Mesh(new THREE.ConeGeometry(2.3 - i * .55, 1.9, 6), leafMat(i));
       leaf.position.y = 3.1 + i * 1.05; g.add(leaf);
     }
     g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  }
+
+  /**
+   * A saguaro. One column and up to two arms that go OUT and then UP — the
+   * elbow is the whole silhouette, and a cactus without one is a green post.
+   *
+   * Soft scenery like every other non-pine: `trunkSolid` models a tree trunk,
+   * and a 6u invisible post where the art is a 3u cactus is worse than walking
+   * through it. The checker enforces that; this is just why.
+   */
+  addCactus(g, rnd) {
+    const mat = new THREE.MeshLambertMaterial({ color: 0x3f7d4a });
+    const spineMat = new THREE.MeshLambertMaterial({ color: 0xe8dcae });
+    const h = 2.6 + rnd(1) * 1.8;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(.34, .40, h, 8), mat);
+    trunk.position.y = h / 2; g.add(trunk);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(.34, 8, 5), mat);
+    cap.position.y = h; g.add(cap);
+    const arms = rnd(2) > .35 ? (rnd(3) > .55 ? 2 : 1) : 0;
+    for (let i = 0; i < arms; i++) {
+      const s = i === 0 ? 1 : -1, at = h * (.38 + rnd(i + 4) * .22), len = .9 + rnd(i + 6) * .7;
+      const out = new THREE.Mesh(new THREE.CylinderGeometry(.2, .22, .8, 7), mat);
+      out.position.set(s * .42, at, 0); out.rotation.z = Math.PI / 2; g.add(out);
+      const up = new THREE.Mesh(new THREE.CylinderGeometry(.2, .22, len, 7), mat);
+      up.position.set(s * .78, at + len / 2 - .1, 0); g.add(up);
+      const tip = new THREE.Mesh(new THREE.SphereGeometry(.2, 7, 5), mat);
+      tip.position.set(s * .78, at + len - .1, 0); g.add(tip);
+    }
+    // A few spines. Not a coat: five cones catch the sun and read as prickly,
+    // and the difference between five and ten is 400 meshes across a desert —
+    // this level was the heaviest in the game until they came down.
+    for (let i = 0; i < 5; i++) {
+      const a = rnd(i + 20) * 6.28, y = .5 + rnd(i + 30) * (h - .8);
+      const sp = new THREE.Mesh(new THREE.ConeGeometry(.05, .26, 4), spineMat);
+      sp.position.set(Math.cos(a) * .36, y, Math.sin(a) * .36);
+      sp.rotation.z = -Math.cos(a) * 1.5; sp.rotation.x = Math.sin(a) * 1.5;
+      g.add(sp);
+    }
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  }
+
+  /** A dry desert bush — a knot of bare twigs. Cheap ground cover for the
+   *  places a cactus would be too tall to put anything behind. */
+  addShrub(g, rnd) {
+    const mat = new THREE.MeshLambertMaterial({ color: 0x8a7442 });
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * 6.28 + rnd(i) * .7, len = .7 + rnd(i + 9) * .6;
+      const tw = new THREE.Mesh(tiledBox(.09, len, .09, 2), mat);
+      tw.position.set(Math.cos(a) * .22, len * .45, Math.sin(a) * .22);
+      tw.rotation.z = -Math.cos(a) * .7; tw.rotation.x = Math.sin(a) * .7;
+      g.add(tw);
+    }
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  }
+
+  /**
+   * A cloud: overlapping spheres, unlit, no shadow. Unlit is not laziness —
+   * a Lambert puff lit by one low sun goes grey on its underside and reads as
+   * a rock floating in the sky, which is exactly what the first pass looked
+   * like over a level built out of floating rocks.
+   */
+  addCloud(c) {
+    const g = new THREE.Group();
+    g.position.set(c.x, c.y, c.z); g.scale.setScalar(c.s);
+    const seed = Math.abs(c.x * 5.1 + c.z * 2.7);
+    const rnd = k => ((Math.sin(seed * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1;
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .92 });
+    const n = 3 + Math.floor(rnd(1) * 3);
+    for (let i = 0; i < n; i++) {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(1.1 + rnd(i + 2) * .8, 7, 5), mat);
+      puff.position.set((i - n / 2) * 1.25 + rnd(i + 5) * .6, rnd(i + 8) * .5, rnd(i + 11) * 1.2 - .6);
+      puff.scale.y = .62;
+      g.add(puff);
+    }
+    this.group.add(g);
+    return { g, home: c.x, drift: c.drift, phase: seed % 6.28 };
   }
 
   /**
@@ -475,7 +636,12 @@ export class World {
   /* ---- runtime ---- */
   update(dt, player) {
     this.time += dt;
+    this.clangT -= dt;
     this.moveMovers(dt, player);
+    // Clouds drift. `drift` is the full sweep over ~40s, so a sky full of them
+    // never lines up into a pattern.
+    for (const c of this.clouds)
+      c.g.position.x = c.home + Math.sin(this.time * .157 + c.phase) * c.drift;
     // A crumbling gate: it sinks into its own lintel and is gone. Cheap, and
     // it reads as "that opened" from anywhere in the arena.
     for (const gt of this.gates) {
@@ -491,11 +657,41 @@ export class World {
     for (const s of this.stars) {
       if (!s.alive) continue;
       s.mesh.rotation.y += dt * 2.4;
-      s.mesh.position.y = s.home + Math.sin(this.time * 2.2 + s.home) * .16;
+      // The magnet. Inside MAGNET_R a star gives up and comes to you, which
+      // turns "I nearly got that one" into "I got that one" — the single
+      // cheapest bit of generosity in a game aimed at a seven-year-old. It
+      // does NOT widen the collection radius, so nothing the checker proved
+      // about where a star can be reached from changes.
+      const chest = player.pos.y + 0.8;
+      const d = Math.hypot(player.pos.x - s.mesh.position.x, chest - s.mesh.position.y,
+                           player.pos.z - s.mesh.position.z);
+      if (d < MAGNET_R) {
+        const k = Math.min(1, dt * 9);
+        s.mesh.position.x += (player.pos.x - s.mesh.position.x) * k;
+        s.mesh.position.y += (chest - s.mesh.position.y) * k;
+        s.mesh.position.z += (player.pos.z - s.mesh.position.z) * k;
+        s.mesh.rotation.y += dt * 9;                 // and it spins up as it comes
+      } else {
+        // Out of range it eases back to where it lives, so a star you nearly
+        // touched and then ran away from is exactly where you left it when you
+        // come back for it.
+        const k = Math.min(1, dt * 4);
+        const want = s.home.y + Math.sin(this.time * 2.2 + s.phase) * .16;
+        s.mesh.position.x += (s.home.x - s.mesh.position.x) * k;
+        s.mesh.position.y += (want - s.mesh.position.y) * k;
+        s.mesh.position.z += (s.home.z - s.mesh.position.z) * k;
+      }
       if (near(player.pos, s.mesh.position, 1.35, 1.9)) {
         s.alive = false; s.mesh.visible = false;
         this.fx('star', s.mesh.position);
       }
+    }
+    // The lit fuse. Only crate in the game that animates, and the flicker is
+    // what stops a tnt reading as a red box.
+    for (const c of this.crates) {
+      if (!c.alive || !c.spark.length) continue;
+      const k = .85 + Math.sin(this.time * 21 + c.s.z) * .3;
+      for (const sp of c.spark) sp.scale.setScalar(k);
     }
 
     this.settleCrates(dt);
@@ -607,12 +803,65 @@ export class World {
     const info = CRATE[c.kind];
     const fromAbove = p.y >= b.y1 - .25 && player.vel.y <= 0;
     if (info.spring) { if (fromAbove) { player.bounce(T.JUMP_V * 1.35); this.fx('spring', c.mesh.position); } return; }
+    // Iron shrugs off a spin, and landing on it is just standing on it. Only a
+    // ground pound opens it. The clang is not decoration — it is the only way
+    // a kid finds that out without being told, so it fires on the spin that
+    // failed, throttled so a held spin doesn't machine-gun it.
+    if (info.poundOnly && !player.pounding) {
+      if (player.spinning && this.clangT <= 0) { this.clangT = .4; this.fx('clang', c.mesh.position); }
+      return;
+    }
     if (!fromAbove && !player.spinning && !player.stomping) return;
+    if (player.vel.y < 0 && !player.stomping) player.bounce(T.JUMP_V * .6);
+    if (info.tnt) return this.explode(c);
+    this.smash(c);
+    this.fx('crate', c.mesh.position, info);
+  }
+
+  /**
+   * Take a crate out of the world and return what it was worth. Shared by the
+   * stomp, the spin and the blast, so "remove the collider FIRST, then the
+   * art, then wake up whatever was resting on it" only has to be right once.
+   */
+  smash(c) {
+    if (!c.alive) return null;
     c.alive = false; c.mesh.visible = false;
     const i = this.solids.indexOf(c.s); if (i >= 0) this.solids.splice(i, 1);
     this.disturbCrates(c.s.y - CRATE_SIZE);
-    if (player.vel.y < 0 && !player.stomping) player.bounce(T.JUMP_V * .6);
-    this.fx('crate', c.mesh.position, info);
+    return CRATE[c.kind];
+  }
+
+  /**
+   * A tnt crate going off. Everything within TNT_R goes with it: the crates,
+   * which is the payout, and anything on patrol, which is the fun. The boss is
+   * exempt — his fight is his.
+   *
+   * Another tnt in range joins the QUEUE rather than recursing, so a row of
+   * them is a chain reaction and not a stack overflow.
+   *
+   * The whole chain pays out as one event. Fifteen crate sounds and fifteen
+   * "+1 ⭐" toasts is not fifteen times better than one boom.
+   */
+  explode(first) {
+    const queue = [first], at = [];
+    let stars = 0, life = 0, heart = 0, n = 0;
+    this.smash(first);
+    while (queue.length) {
+      const c = queue.shift();
+      const here = c.mesh.position;
+      at.push(here.clone());
+      for (const o of this.crates) {
+        if (!o.alive || o.mesh.position.distanceTo(here) > TNT_R) continue;
+        const got = this.smash(o);
+        n++; stars += got.stars || 0; life += got.life || 0; heart += got.heart || 0;
+        if (got.tnt) queue.push(o);
+      }
+      for (const e of this.enemies) {
+        if (!e.alive || e.hp || e.pos.distanceTo(here) > TNT_R) continue;
+        e.alive = false; e.mesh.visible = false; n++;
+      }
+    }
+    this.fx('boom', first.mesh.position.clone(), { stars, life, heart, n, at });
   }
 
   updateEnemy(e, dt, player) {
@@ -628,8 +877,16 @@ export class World {
     if (player.spinning && !e.spinProof && horiz(player.pos, e.pos) < T.SPIN_R + e.radius
       && Math.abs(player.pos.y - e.pos.y) < e.height + 1) return this.kill(e, player, 'spin');
     if (!near(player.pos, e.pos, e.radius + .55, e.height + .4)) return;
-    if (player.stomping && !e.stompProof) return this.kill(e, player, 'stomp');
-    const stomped = player.vel.y < 0 && player.pos.y > e.pos.y + e.height - .55;
+    const stomped = player.stomping || (player.vel.y < 0 && player.pos.y > e.pos.y + e.height - .55);
+    // A trampoline, not a stomp target: land on the bell and you bounce, and
+    // it is still there next time. `invT` is what stops the very next frame —
+    // still inside its radius, no longer falling — reading as a sting.
+    if (stomped && e.bouncy) {
+      player.bounce();
+      e.invT = .35; e.squish = 1;
+      this.fx('boing', e.pos.clone());
+      return;
+    }
     if (stomped && !e.stompProof) return this.kill(e, player, 'stomp');
     if (player.hurt()) this.fx('hurt', player.pos);
   }
@@ -687,6 +944,11 @@ export class World {
   dispose() { this.scene.remove(this.group); }
 }
 
+/** How close a star has to be before it gives up and comes to you. It does
+ *  NOT widen the collection radius — the star travels, the rule doesn't — so
+ *  everything tools/check.js proved about reachability still holds. */
+const MAGNET_R = 3.0;
+
 const horiz = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 /** Cheap capsule-ish proximity: horizontal radius + vertical span. */
 function near(p, q, r, hgt) {
@@ -698,18 +960,32 @@ function near(p, q, r, hgt) {
 const SPLASH = {
   water: 0x8fd8f0, grass: 0x6cc24a, dirt: 0x8a5a30,
   sand: 0xe8d49a, rock: 0x9aa2b4, lava: 0xff8a3d, ice: 0xdff4ff,
-  deck: 0xc2ccd9, panel: 0x59647a,
+  deck: 0xc2ccd9, panel: 0x59647a, sandstone: 0xd99b5c, regolith: 0x9096ad,
 };
 
 /* ---------------------------------------------------------------- crates */
 // Three cues, deliberately redundant: a tint, a stencil on every face, and a
 // topper you can read from behind or in shadow. Tint alone was the whole
 // difference once, and you could not tell the bonus crate from the bouncy one.
+//
+// `stars` is NOT written here: it comes from CRATE_STARS in the pure module,
+// because tools/check.js has to count the same level total the game pays out.
+const kind = (k, extra) => ({ stars: CRATE_STARS[k], ...extra });
 export const CRATE = {
-  plain: { stars: 1, tint: 0xffffff },
-  star: { stars: 5, tint: 0xffe9a8 },
-  life: { stars: 0, life: 1, tint: 0xa8ffc0 },
-  spring: { stars: 0, spring: true, tint: 0xa8d8ff },
+  plain: kind('plain', { tint: 0xffffff }),
+  star: kind('star', { tint: 0xffe9a8 }),
+  life: kind('life', { life: 1, tint: 0xa8ffc0 }),
+  // Hearts, not lives. A kid two hearts down is a kid about to lose a life,
+  // and the fix for that should be findable in the level rather than in the
+  // pause menu.
+  heart: kind('heart', { heart: 1, tint: 0xffc2cc }),
+  spring: kind('spring', { spring: true, tint: 0xa8d8ff }),
+  // Shrugs off a spin AND a landing — only a ground pound opens it. It is the
+  // one crate that teaches the C button, so it is deliberately worth 3.
+  iron: kind('iron', { poundOnly: true, tint: 0x9fb0c8 }),
+  // Worth nothing on its own; it pays out by taking its neighbours with it.
+  // The whole point is the chain, so put it in the MIDDLE of a stack.
+  tnt: kind('tnt', { tnt: true, tint: 0xff9a8a }),
 };
 
 /* ---- crate face stencils ---- */
@@ -772,6 +1048,50 @@ const TOPPER = {
     const plate = new THREE.Mesh(new THREE.CylinderGeometry(.52, .52, .1, 10), lam(0x6fb7e8));
     plate.position.y = CRATE_SIZE / 2 + .33;
     g.add(plate);
+    return g;
+  },
+  // A fuse with a spark on the end of it, and the spark is UNLIT so it stays
+  // the brightest thing on the crate in a cave, at night and in shadow. This
+  // one has to say "not like the others" from the far end of a row.
+  tnt() {
+    const g = new THREE.Group();
+    const wick = new THREE.Mesh(new THREE.CylinderGeometry(.05, .07, .5, 5), lam(0x6b5a3a));
+    wick.position.set(.12, CRATE_SIZE / 2 + .25, 0); wick.rotation.z = -.35; g.add(wick);
+    const spark = new THREE.Mesh(new THREE.SphereGeometry(.17, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xfff3b0 }));
+    spark.position.set(.30, CRATE_SIZE / 2 + .55, 0); spark.name = 'spark'; g.add(spark);
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(.28, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xff8a3d, transparent: true, opacity: .35 }));
+    glow.position.copy(spark.position); glow.name = 'spark'; g.add(glow);
+    return g;
+  },
+  // A riveted band with a down arrow standing on it. The arrow is the topper's
+  // whole job: from behind, the stencil is out of sight and the shape has to
+  // still say "pound me".
+  iron() {
+    const g = new THREE.Group(), steel = lam(0x8e99ab);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(CRATE_SIZE * .96, .16, CRATE_SIZE * .34), steel);
+    band.position.y = CRATE_SIZE / 2 + .07; g.add(band);
+    for (const s of [-1, 1]) {
+      const rivet = new THREE.Mesh(new THREE.SphereGeometry(.1, 6, 5), lam(0xc7cedb));
+      rivet.position.set(s * .62, CRATE_SIZE / 2 + .14, 0); g.add(rivet);
+    }
+    const arrow = new THREE.Mesh(new THREE.ConeGeometry(.26, .42, 4), lam(0xffd23f));
+    arrow.position.y = CRATE_SIZE / 2 + .38; arrow.rotation.y = Math.PI / 4;
+    arrow.rotation.x = Math.PI; g.add(arrow);
+    return g;
+  },
+  heart() {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshLambertMaterial({ color: 0xff5d73, emissive: 0x5c0f1c });
+    // Two lobes and a point, out of three primitives. A real heart shape is an
+    // ExtrudeGeometry and this reads identically at N64 scale.
+    for (const s of [-1, 1]) {
+      const lobe = new THREE.Mesh(new THREE.SphereGeometry(.2, 8, 6), mat);
+      lobe.position.set(s * .16, CRATE_SIZE / 2 + .48, 0); g.add(lobe);
+    }
+    const point = new THREE.Mesh(new THREE.ConeGeometry(.32, .42, 6), mat);
+    point.position.y = CRATE_SIZE / 2 + .21; point.rotation.x = Math.PI; g.add(point);
     return g;
   },
 };
@@ -841,6 +1161,90 @@ export const ENEMY = {
       e.pos.y = e.home.y + Math.abs(Math.sin(e.t * 7)) * .1;
     },
   },
+  /* A grumblin who read the safety notice. The stomp bounces off the helmet;
+   * the spin goes straight through him. He is the only enemy in the game that
+   * teaches a BUTTON rather than a movement, so his silhouette has to say
+   * "not that one" from a distance — hence a yellow hat on a green body, the
+   * two most different colours in the level. */
+  hardhat: {
+    ...BODY.hardhat, stompProof: true, speed: 2.3,
+    build() {
+      const g = new THREE.Group();
+      const b = new THREE.Mesh(new THREE.BoxGeometry(1.1, .9, 1.0), lam(0x3f8e46));
+      b.position.y = .55; g.add(b);
+      // The hat: a dome, a brim and a ridge. The brim is what stops it reading
+      // as a hair bun from behind, which is the only angle you get.
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(.52, 10, 6, 0, Math.PI * 2, 0, Math.PI * .5),
+        lam(0xffc02e));
+      dome.position.y = 1.06; dome.scale.y = .85; g.add(dome);
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(.72, .72, .1, 12), lam(0xffc02e));
+      brim.position.y = 1.05; g.add(brim);
+      const ridge = new THREE.Mesh(new THREE.BoxGeometry(.12, .16, .96), lam(0xe09a12));
+      ridge.position.y = 1.3; g.add(ridge);
+      for (const s of [-1, 1]) {
+        const eye = new THREE.Mesh(new THREE.BoxGeometry(.2, .24, .1), lam(0xffffff));
+        eye.position.set(s * .26, .74, .52); g.add(eye);
+        const pup = new THREE.Mesh(new THREE.BoxGeometry(.09, .12, .06), lam(0x1a1a1a));
+        pup.position.set(s * .26, .72, .58); g.add(pup);
+        // Cross brows: the hat alone reads as a builder, and a builder is not
+        // obviously something you have to attack.
+        const brow = new THREE.Mesh(new THREE.BoxGeometry(.26, .09, .1), lam(0x1f4d24));
+        brow.position.set(s * .26, .9, .54); brow.rotation.z = -s * .35; g.add(brow);
+        const foot = new THREE.Mesh(new THREE.BoxGeometry(.3, .2, .5), lam(0x27682d));
+        foot.position.set(s * .32, .1, .05); g.add(foot);
+      }
+      return g;
+    },
+    tick(e) {
+      const w = e.speed / Math.max(1, e.range) * 2;
+      const k = Math.sin(e.t * w), ax = e.axis === 'x';
+      e.pos[ax ? 'x' : 'z'] = e.home[ax ? 'x' : 'z'] + k * e.range / 2;
+      const fwd = Math.cos(e.t * w) > 0;
+      e.mesh.rotation.y = ax ? (fwd ? Math.PI / 2 : -Math.PI / 2) : (fwd ? 0 : Math.PI);
+      e.pos.y = e.home.y + Math.abs(Math.sin(e.t * 6)) * .08;
+    },
+  },
+  /* Hops instead of walking, so it is a moving target in the one axis a
+   * platformer usually gives you for free. Stompable and spinnable — it is
+   * the timing that is the problem, not the defence.
+   *
+   * The squash is on the way UP out of the crouch, not on the landing: a hop
+   * you can see coming is a hop a seven-year-old can wait out, and that is the
+   * whole reason this thing is fair. */
+  hopper: {
+    ...BODY.hopper, speed: 1.5,
+    build() {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(.55, 10, 8), lam(0xe86a9c));
+      body.position.y = .5; body.name = 'body'; g.add(body);
+      for (const s of [-1, 1]) {
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(.15, 8, 6), lam(0xffffff));
+        eye.position.set(s * .22, .68, .42); g.add(eye);
+        const pup = new THREE.Mesh(new THREE.SphereGeometry(.07, 6, 5), lam(0x1a1a1a));
+        pup.position.set(s * .22, .68, .5); g.add(pup);
+        // Two big feet it lands on. They are also the only thing that makes
+        // the shape read as "this jumps" while it is sitting still.
+        const foot = new THREE.Mesh(new THREE.BoxGeometry(.34, .16, .58), lam(0xb83f74));
+        foot.position.set(s * .28, .08, .1); foot.name = 'foot'; g.add(foot);
+      }
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(.13, .42, 5), lam(0xb83f74));
+      ear.position.set(0, .98, -.06); ear.rotation.x = -.3; g.add(ear);
+      return g;
+    },
+    tick(e) {
+      // |sin| is a bounce: it touches down at every zero and never goes under.
+      const hop = Math.abs(Math.sin(e.t * e.speed));
+      e.pos.y = e.home.y + hop * e.bob;
+      if (e.range) {
+        const k = Math.sin(e.t * e.speed / Math.max(1, e.range) * 2), ax = e.axis === 'x';
+        e.pos[ax ? 'x' : 'z'] = e.home[ax ? 'x' : 'z'] + k * e.range / 2;
+      }
+      const body = e.mesh.getObjectByName('body');
+      // Squashed on the floor, stretched at the top of the arc.
+      body.scale.set(1 + (1 - hop) * .3, 1 - (1 - hop) * .3, 1 + (1 - hop) * .3);
+      for (const c of e.mesh.children) if (c.name === 'foot') c.position.y = .08 + hop * .12;
+    },
+  },
   // SPIKY. Can't be stomped or spun — this one you jump over. (Hi, prickleburr.)
   prickle: {
     ...BODY.prickle, stompProof: true, spinProof: true, speed: 1.4,
@@ -862,11 +1266,24 @@ export const ENEMY = {
       if (e.range) e.pos.x = e.home.x + Math.sin(e.t * e.speed / e.range * 2) * e.range / 2;
     },
   },
-  // Underwater. All sting and no weak spot — this one you swim around.
-  // Floats, so it must also be in FLOATING (src/builder.js) or the checker
-  // fails it for standing in mid-water.
+  /* Underwater, and the one enemy in the game with a top and a bottom.
+   *
+   * The BELL is a trampoline: sink onto it and you bounce, at the mode's
+   * BOUNCE, which underwater is worth more than a stroke and costs no air —
+   * so a line of jellyfish is a route up, not a wall. Anything below the rim
+   * is TENTACLES and they sting. The stomp window is `height - .55` above its
+   * feet (see updateEnemy), which lands just above the rim: feet over the top,
+   * you bounce; anywhere else on it, you are in the tentacles.
+   *
+   * Still spinProof. A spin is a horizontal attack and horizontally this thing
+   * is all sting — and "swim over it, not into it" is a better lesson than
+   * "press X at everything".
+   *
+   * Floats, so it must also be in FLOATING (src/builder.js) or the checker
+   * fails it for standing in mid-water.
+   */
   jelly: {
-    ...BODY.jelly, stompProof: true, spinProof: true, speed: 1.1,
+    ...BODY.jelly, spinProof: true, bouncy: true, speed: 1.1,
     build() {
       const g = new THREE.Group();
       const bell = new THREE.Mesh(
@@ -875,17 +1292,29 @@ export const ENEMY = {
           color: 0xff8ad8, emissive: 0x5a1040, transparent: true, opacity: .82, side: THREE.DoubleSide,
         }));
       bell.position.y = 1.05; bell.name = 'bell'; g.add(bell);
+      // A pale cap on the crown. The bell is the safe half and the tentacles
+      // are the dangerous half, and a kid has to be able to tell which end is
+      // which from above — which, in a dive, is the angle you always have.
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(.44, 10, 5, 0, Math.PI * 2, 0, Math.PI * .45),
+        new THREE.MeshLambertMaterial({ color: 0xfff0fb, emissive: 0x8a6f86, transparent: true, opacity: .9 }));
+      cap.position.y = 1.28; cap.name = 'bell'; g.add(cap);
       for (let i = 0; i < 6; i++) {
         const a = i / 6 * Math.PI * 2;
-        const t = new THREE.Mesh(new THREE.CylinderGeometry(.05, .02, .95, 4), lam(0xffc2ec));
+        // Hotter than the bell on purpose: the stinging half is the red half.
+        const t = new THREE.Mesh(new THREE.CylinderGeometry(.05, .02, .95, 4),
+          new THREE.MeshLambertMaterial({ color: 0xff5d73, emissive: 0x5a0a1a }));
         t.position.set(Math.cos(a) * .33, .55, Math.sin(a) * .33);
         t.name = 'tent'; g.add(t);
       }
       return g;
     },
-    tick(e) {
+    tick(e, dt) {
       e.pos.y = e.home.y + Math.sin(e.t * e.speed) * e.bob;
-      const k = Math.sin(e.t * 2.6);
+      // `squish` is the recoil from being landed on, on top of the idle pulse.
+      // Without it the bell is a solid you happen to bounce off; with it, the
+      // bell is what bounced you.
+      e.squish = Math.max(0, (e.squish || 0) - dt * 3.4);
+      const k = Math.sin(e.t * 2.6) - e.squish * 1.8;
       for (const c of e.mesh.children) {
         if (c.name === 'tent') c.rotation.x = k * .28;
         else if (c.name === 'bell') c.scale.set(1 - k * .1, 1 + k * .18, 1 - k * .1);

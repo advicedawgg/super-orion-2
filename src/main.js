@@ -38,14 +38,21 @@ addEventListener('resize', resize); resize();
 /* ------------------------------------------------------------------ state */
 const G = {
   state: 'LOADING', level: 0, hearts: 3, lives: 5, stars: 0, runStars: 0,
-  spawn: new THREE.Vector3(), timer: 0, best: 0,
+  spawn: new THREE.Vector3(), timer: 0, best: 0, runT: 0, hudT: 0,
 };
 const save = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
 G.best = save.best || 0;
 // Best stars per level id. This is what the hub placards read, and what makes
 // "go and beat your score on the reef" a thing you can do at all.
 G.lv = save.lv || {};
+// Best TIME per level id, in seconds. A separate map, not a field on `lv`,
+// because `id in G.lv` is what "have you cleared this" means everywhere —
+// including `unlocked()` — and it must stay a plain membership test.
+G.tm = save.tm || {};
 const bestFor = id => G.lv[id] || 0;
+const timeFor = id => G.tm[id] || 0;
+/** m:ss. The clock never shows hours: a level is 600u long, not an afternoon. */
+const clock = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const totalStars = () => LEVELS.reduce((n, l) => n + bestFor(l.id), 0);
 const cleared = id => id in G.lv;
 const allCleared = () => LEVELS.every(l => cleared(l.id));
@@ -57,7 +64,7 @@ const allCleared = () => LEVELS.every(l => cleared(l.id));
 const unlocked = i => i === 0 || cleared(LEVELS[i].id) || cleared(LEVELS[i - 1].id);
 function persist() {
   G.best = Math.max(G.best, totalStars());
-  localStorage.setItem(SAVE_KEY, JSON.stringify({ best: G.best, lv: G.lv }));
+  localStorage.setItem(SAVE_KEY, JSON.stringify({ best: G.best, lv: G.lv, tm: G.tm }));
 }
 
 const player = new Player(scene);
@@ -106,6 +113,13 @@ function bubble(x, y, z) {
   // than a single blob that pops all at once.
   b.life = 0.8 + Math.random() * 1.0;
 }
+/* ------------------------------------------------------------------ shake */
+// One scalar, decayed. Added to the camera POSITION after lookAt, never to the
+// aim point: shaking the aim swings the whole level about its far edge and
+// reads as the world wobbling rather than the camera being hit.
+let shakeAmt = 0;
+const shake = a => { shakeAmt = Math.min(1.4, shakeAmt + a); };
+
 /** A breath: a proper cloud of them, not a token puff. */
 const breath = (n, x, y, z) => { for (let i = 0; i < n; i++) bubble(x, y, z); };
 function updateBits(dt) {
@@ -142,6 +156,44 @@ function drawHUD() {
   // inside a level it is what this run is worth.
   $('stars').textContent = `⭐ ${G.inHub ? totalStars() : G.stars}`;
   $('lives').textContent = `🐱 ${G.lives}`;
+  drawTime();
+}
+
+// The run clock. Ticks in PLAY only, so a pause, a death card or a read of the
+// sound menu is not held against you.
+const timeEl = $('time');
+function drawTime() {
+  if (G.inHub) return;
+  const best = timeFor(LEVELS[G.level]?.id);
+  timeEl.textContent = clock(G.runT);
+  // Gold while you are still ahead of your own record. It is the only bit of
+  // the clock a kid needs to understand, and it needs no explaining.
+  timeEl.classList.toggle('best', !!best && G.runT < best);
+}
+
+/* ---- the crate combo ----
+ * Smash crates within COMBO_WINDOW of each other and they count up, the note
+ * climbs, and the number punches on screen. Nothing is awarded for it: the
+ * chain is the reward. Making it worth stars would turn "smash everything" —
+ * which is what a seven-year-old does anyway — into something you can do
+ * wrong. */
+const COMBO_WINDOW = 1.6;
+const comboEl = $('combo');
+let comboN = 0, comboT = 0;
+function addCombo(n = 1) {
+  comboN += n; comboT = COMBO_WINDOW;
+  if (comboN < 2) return;
+  comboEl.textContent = `${comboN}× !`;
+  comboEl.classList.remove('on');
+  void comboEl.offsetWidth;              // restart the punch, mid-flight
+  comboEl.classList.add('on');
+  Sound.sfx('combo', comboN);
+}
+function updateCombo(dt) {
+  if (comboT <= 0) return;
+  if ((comboT -= dt) > 0) return;
+  comboN = 0;
+  comboEl.classList.remove('on');
 }
 
 // The boss's crowns. Only exists while a boss does, which is one level.
@@ -278,6 +330,8 @@ for (const ev of ['pointerup', 'pointercancel']) card.addEventListener(ev, () =>
 player.fire = name => {
   Sound.sfx(name);
   if (name === 'stroke') breath(14, player.pos.x, player.pos.y + 1.5, player.pos.z);
+  // A ground pound is the heaviest thing Orion does. It should land like it.
+  if (name === 'stompland') { shake(0.45); burst(player.pos.clone(), 0xffffff, 10, 5); }
 };
 
 function worldFx(name, at, info) {
@@ -285,9 +339,27 @@ function worldFx(name, at, info) {
     case 'star': G.stars++; G.runStars++; Sound.sfx('star'); burst(at, 0xffd23f, 8, 6); break;
     case 'crate':
       Sound.sfx('crate'); burst(at, 0xc08a4a, 14, 8);
+      addCombo();
       if (info?.stars) { G.stars += info.stars; G.runStars += info.stars; Sound.sfx('star'); burst(at, 0xffd23f, info.stars * 2, 7); toast(`+${info.stars} ⭐`); }
       if (info?.life) { G.lives++; Sound.sfx('life'); toast('1-UP! 🐱'); }
+      if (info?.heart) heal();
       break;
+    /* ---- the new crates ---- */
+    // A tnt chain pays out ONCE, however many crates it took: fifteen separate
+    // crate sounds and fifteen "+1 ⭐" toasts is not fifteen times better.
+    case 'boom':
+      Sound.sfx('boom'); shake(0.9);
+      for (const p of info.at) { burst(p, 0xff8a3d, 12, 12); burst(p, 0x4a4034, 8, 7); }
+      addCombo(info.n);
+      if (info.stars) { G.stars += info.stars; G.runStars += info.stars; burst(at, 0xffd23f, 24, 9); }
+      if (info.life) { G.lives += info.life; Sound.sfx('life'); }
+      if (info.heart) heal();
+      toast(info.stars ? `💥 +${info.stars} ⭐` : '💥 BOOM');
+      break;
+    // The spin that skipped off an iron crate. It has to read as "wrong tool",
+    // which is why it gets a spark and a clang and no debris at all.
+    case 'clang': Sound.sfx('clang'); burst(at, 0xfff3b0, 5, 4); break;
+    case 'boing': Sound.sfx('boing'); burst(at, 0xffc2ec, 10, 5); break;
     case 'spring': Sound.sfx('spring'); burst(at, 0xa8d8ff, 8, 5); break;
     case 'bonk': Sound.sfx('bonk'); burst(at, 0xffffff, 12, 7); break;
     case 'hurt': damage(); break;
@@ -300,21 +372,24 @@ function worldFx(name, at, info) {
     case 'bosshop': Sound.sfx('bosshop'); break;
     case 'bossland':
       Sound.sfx('bossland');
+      shake(0.55);
       burst(at.clone().setY(at.y + .2), 0xd9c39a, 14, 6);
       break;
     case 'bosshit':
       Sound.sfx('bosshit');
+      shake(0.7);
       burst(at.clone().setY(at.y + 1.6), 0xffd23f, 20, 9);
       drawBoss(info.hp);
       toast(info.say, true);
       break;
     case 'bossdown':
       Sound.sfx('bossdown');
+      shake(1.2);
       burst(at.clone().setY(at.y + 1.4), 0xffd23f, 30, 11);
       drawBoss(0);
       toast(info.say, true);
       break;
-    case 'gate': Sound.sfx('gate'); burst(at, 0x8892a6, 22, 9); break;
+    case 'gate': Sound.sfx('gate'); shake(0.8); burst(at, 0x8892a6, 22, 9); break;
   }
   drawHUD();
 }
@@ -322,8 +397,19 @@ function worldFx(name, at, info) {
 function damage() {
   Sound.sfx('hurt');
   G.hearts--;
+  shake(0.5);
   drawHUD();
   if (G.hearts <= 0) die();
+}
+
+/** A heart crate. Silent about it when you are already full, rather than
+ *  cheering for nothing — but the crate still smashed and still counted. */
+function heal() {
+  if (G.hearts >= 3) { toast('💖 ALREADY FULL'); return; }
+  G.hearts = Math.min(3, G.hearts + 1);
+  Sound.sfx('checkpoint');
+  toast('💖 +1 HEART');
+  burst(player.pos.clone().setY(player.pos.y + 1.2), 0xff5d73, 14, 6);
 }
 
 function die(fell = false) {
@@ -365,9 +451,11 @@ function enterHub() {
   loadWorld(HUB);
   world.labelPortals(i => {
     const open = unlocked(i);
+    const t = timeFor(LEVELS[i].id);
     return {
       title: LEVELS[i].name,
-      sub: !open ? '🔒 LOCKED' : cleared(LEVELS[i].id) ? `⭐ ${bestFor(LEVELS[i].id)}` : 'NEW',
+      sub: !open ? '🔒 LOCKED'
+        : cleared(LEVELS[i].id) ? `⭐ ${bestFor(LEVELS[i].id)}${t ? `  ⏱ ${clock(t)}` : ''}` : 'NEW',
       accent: open ? LEVELS[i].sky[0] : 0x55607a,
       locked: !open,
     };
@@ -386,6 +474,10 @@ function enterLevel(i) {
   G.inHub = false;
   G.level = i;
   G.hearts = 3; G.lives = 5; G.stars = 0;
+  // The clock is per ATTEMPT, not per life: it survives a death and a
+  // checkpoint respawn, and only a fresh entry from the map resets it.
+  G.runT = 0; G.hudT = 0;
+  comboN = 0; comboT = 0; comboEl.classList.remove('on');
   loadWorld(LEVELS[i]);
   G.state = 'PLAY'; hideOverlay(); drawHUD();
 }
@@ -407,6 +499,10 @@ function levelClear() {
   // the score you already have.
   const first = !(id in G.lv);          // clearing it with 0 stars still counts
   G.lv[id] = Math.max(prev, G.runStars);
+  // Same rule for the clock, the other way up — and a first clear always sets
+  // it, because `Math.min` against a missing best is `NaN` forever after.
+  const prevT = timeFor(id), quicker = !prevT || G.runT < prevT;
+  if (quicker) G.tm[id] = G.runT;
   persist();
   // Clearing this for the first time is what opens the next one.
   if (first && G.level + 1 < LEVELS.length) G.justUnlocked = G.level + 1;
@@ -414,6 +510,7 @@ function levelClear() {
   show(`<h1>LEVEL CLEAR<small>${LEVELS[G.level].name.toUpperCase()}</small></h1>
     <p class="lead">Stars this level: <b>${G.runStars} / ${total}</b>${perfect ? ' — ⭐ STAR CHAMPION!' : ''}<br>
     ${beat && prev ? `New best! (was ${prev})<br>` : ''}
+    Time: <b>${clock(G.runT)}</b>${quicker && prevT ? ' — ⏱ NEW RECORD!' : prevT ? ` (best ${clock(prevT)})` : ''}<br>
     Stars altogether: <b>${totalStars()}</b></p>
     <p class="go">press SPACE for the map</p>`);
 }
@@ -433,7 +530,8 @@ function gameWin() {
   persist();
   show(`<h1>YOU DID IT<small>SUPER ORION 2</small></h1>
     <p class="lead"><b>${totalStars()}</b> stars collected. Best ever: <b>${G.best}</b>.<br>
-    Jungle, coast, peaks, the cavern, the reef, the whole sky — and King Dad himself.<br>
+    Jungle, coast and peaks. The cavern, the reef, the whole sky.<br>
+    The dunes, the moon, the gardens above the clouds — and King Dad himself.<br>
     Dad dethroned. Ten more minutes for everyone.</p>
     <p class="go">press SPACE for the map</p>`);
 }
@@ -459,7 +557,11 @@ const camOff = new THREE.Vector3();
 // running under the win screen — so this must not be a bare LEVELS[G.level].
 // It threw every frame on the WON state, which also stopped the render loop and
 // froze the picture behind the card.
-const shownLevel = () => LEVELS[Math.min(G.level, LEVELS.length - 1)];
+// …and on the map it is the HUB whose rig we want, not whichever level you
+// last played. Without this branch `HUB.camOff` and `HUB.sunDir` were dead
+// data: the island was always framed with the boom of LEVELS[G.level], which
+// is why the level select looked different depending on where you came from.
+const shownLevel = () => G.inHub ? HUB : LEVELS[Math.min(G.level, LEVELS.length - 1)];
 function camTarget(out) {
   const def = shownLevel();
   const off = camOff.set(...(def.camOff || CAM_OFF))
@@ -546,6 +648,13 @@ function updateCamera(dt) {
   camAim.z = THREE.MathUtils.damp(camAim.z, player.pos.z, 8, dt);
   cam.position.copy(camPos);
   cam.lookAt(camAim);
+  // Shake AFTER lookAt, so it moves the camera without re-aiming it.
+  if (shakeAmt > 0.002) {
+    shakeAmt = Math.max(0, shakeAmt - dt * 3.4);
+    const a = shakeAmt * shakeAmt;       // squared: it dies away fast, like a knock
+    cam.position.x += (Math.random() - .5) * a;
+    cam.position.y += (Math.random() - .5) * a;
+  }
   keepOrionInSight();
 
   // Keep the shadow frustum glued to the player or shadows blink out.
@@ -599,6 +708,11 @@ function frame(now) {
         break;
       }
       if (In.hit('restart')) { respawn(); break; }
+      // The clock runs in PLAY and nowhere else: a pause, a death card or a
+      // read of the sound menu is not held against you.
+      G.runT += dt;
+      if ((G.hudT -= dt) <= 0) { G.hudT = .1; drawTime(); }
+      updateCombo(dt);
       const hit = player.update(dt, world.solids, LEVELS[G.level].camYaw || 0);
       player.riding = hit.grounded ? hit.ground : null;
       if (player.metered) drawTank();
@@ -702,6 +816,26 @@ In.cheat('toot', () => {
   toast('💨 EXCUSE YOU');
 });
 In.cheat('egg', () => { G.stars += 25; toast('🥚 GOLDEN EGG (+25)'); Sound.sfx('star'); drawHUD(); });
+// Set off every fuse in the level at once. The loop re-filters rather than
+// iterating a snapshot, because each blast takes other tnt with it and a stale
+// list would hand explode() a crate that is already gone.
+In.cheat('blast', () => {
+  const live = () => world.crates.filter(c => c.alive && c.kind === 'tnt');
+  let n = 0;
+  for (let c = live()[0]; c && n < 40; c = live()[0]) { world.explode(c); n++; }
+  if (!n) { toast('💥 NOTHING TO BLOW UP'); Sound.sfx('bonk'); }
+  else shake(1.4);
+});
+// Moon gravity, anywhere. Not in the water or the jetpack level: those modes
+// meter your lift with a tank, and swapping the tuning out from under one
+// takes the gauge, the gear and the only way up with it.
+In.cheat('luna', () => {
+  const def = world.def;
+  if (def.mode && def.mode !== 'moon') { toast('🌙 NOT DOWN HERE'); Sound.sfx('bonk'); return; }
+  player.setMode(player.t.GRAV === 26 ? undefined : 'moon', def.ceilY ?? null);
+  toast(player.t.GRAV === 26 ? '🌙 MOON BOOTS ON' : '🌍 BACK TO NORMAL');
+  Sound.sfx('life');
+});
 
 async function boot() {
   // Painting the procedural textures costs a few hundred ms; do it up front

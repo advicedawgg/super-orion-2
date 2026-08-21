@@ -159,10 +159,15 @@ export class Player {
     this.jetFx.visible = false;
     this.tank = 1;
     this.rig.scuba.visible = mode === 'swim';
-    this.rig.flight.visible = mode === 'jet';
+    // The suit goes on for the moon as well as for the jetpack. It is the same
+    // reason the reef gets a brass helmet: from behind — the only angle this
+    // game has — a level that changes how you move has to change how you look,
+    // or the kid has no cue at all that the rules are different here.
+    const suited = mode === 'jet' || mode === 'moon';
+    this.rig.flight.visible = suited;
     // One material, two atlases. `needsUpdate` is not optional — swapping a map
     // on a live material without it keeps the old texture bound.
-    this.rig.mat.map = tex(mode === 'jet' ? 'orionSuit' : 'orion');
+    this.rig.mat.map = tex(suited ? 'orionSuit' : 'orion');
     this.rig.mat.needsUpdate = true;
   }
 
@@ -172,7 +177,7 @@ export class Player {
   reset(at) {
     this.pos.copy(at); this.vel.set(0, 0, 0);
     this.grounded = false; this.coyote = 0; this.buffer = 0; this.jumps = 0;
-    this.spinT = 0; this.spinCd = 0; this.hurtT = 0; this.stomping = false;
+    this.spinT = 0; this.spinCd = 0; this.hurtT = 0; this.stomping = false; this.poundT = 0;
     this.squash = 0; this.stride = 0; this.airT = 0; this.cutting = false;
     this.thrusting = false; this.jetFx.visible = false; this.tank = 1;
     this.rig.root.position.copy(at);
@@ -180,6 +185,10 @@ export class Player {
   }
 
   get spinning() { return this.spinT > 0; }
+  /** Coming down in a ground pound, or landed one within the last frame or
+   *  two. Anything that only a pound may open has to ask THIS, not `stomping`
+   *  — see the poundT window in update(). */
+  get pounding() { return this.stomping || this.poundT > 0; }
   get invuln() { return this.hurtT > 0; }
 
   update(dt, solids, camYaw) {
@@ -236,10 +245,18 @@ export class Player {
       this.pos.y = this.ceilY; this.vel.y = Math.min(this.vel.y, 0);
     }
     this.grounded = hitInfo.grounded;
+    this.poundT = Math.max(0, this.poundT - dt);
     if (this.grounded) {
       this.jumps = 0;
       if (!was) { this.squash = Math.min(1, this.airT * 1.5); this.fire('land'); }
-      if (this.stomping) { this.stomping = false; this.squash = 1; this.fire('stompland'); }
+      if (this.stomping) {
+        this.stomping = false; this.squash = 1; this.fire('stompland');
+        // The pound ENDS the moment it lands — and world.update() runs after
+        // this, so by the time an iron crate is asked "was that a ground
+        // pound?" the answer was already false. This is the window that keeps
+        // the answer true for the frame the impact actually happens in.
+        this.poundT = 0.14;
+      }
       this.airT = 0;
     } else this.airT += dt;
     tankStep(this, dt, t);
@@ -258,8 +275,10 @@ export class Player {
     return true;
   }
 
-  /** Spring / stomp-bounce. Sets its own height — never subject to jump-cut. */
-  bounce(v = T.JUMP_V * .82) {
+  /** Spring / stomp-bounce. Sets its own height — never subject to jump-cut.
+   *  The default is the MODE's bounce: 0.82 of a jump is a satisfying pop on
+   *  land and a rocket underwater, where a jump is half the size. */
+  bounce(v = this.t.BOUNCE) {
     this.vel.y = v; this.jumps = 1; this.squash = .5;
     this.stomping = false; this.cutting = false; this.buffer = 0;
   }

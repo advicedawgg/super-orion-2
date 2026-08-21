@@ -37,8 +37,18 @@
         text-shadow:0 3px 0 rgba(0,0,0,.55)}
   #boss.on{display:flex}
   #boss span.gone{opacity:.25;filter:grayscale(1)}
-  /* The map has no hearts to lose and no lives to spend. */
-  #hud.hub #hearts,#hud.hub #lives,#hud.hub #tank{display:none}
+  /* The map has no hearts to lose, no lives to spend and no clock running. */
+  #hud.hub #hearts,#hud.hub #lives,#hud.hub #tank,#hud.hub #time{display:none}
+  /* The run clock. Deliberately quiet — a kid who wants to race can read it,
+     and a kid who doesn't should never feel chased by it. */
+  #time{color:#b8c6e8;opacity:.72;font-variant-numeric:tabular-nums;font-size:.8em}
+  #time.best{color:var(--gold);opacity:1}
+  /* The crate combo. Sits under the toast, punches on every increment. */
+  #combo{position:fixed;left:50%;top:34%;transform:translateX(-50%) scale(.6);opacity:0;
+    font-size:clamp(26px,7vmin,72px);color:#fff;pointer-events:none;
+    text-shadow:0 0 .5em rgba(255,157,47,.9),0 5px 0 rgba(0,0,0,.55);
+    transition:transform .12s cubic-bezier(.2,2.2,.4,1),opacity .12s}
+  #combo.on{transform:translateX(-50%) scale(1);opacity:1}
   #stars{color:var(--gold)}
   #lives{color:var(--cool)}
   #toast{position:fixed;left:50%;top:22%;transform:translateX(-50%) scale(.8);opacity:0;
@@ -119,8 +129,9 @@
 
 <div id="hud" hidden>
   <div class="grp"><span id="hearts"></span><span id="tank"><i></i></span></div>
-  <div class="grp"><span id="stars">⭐ 0</span><span id="lives">🐱 5</span></div>
+  <div class="grp"><span id="time">0:00</span><span id="stars">⭐ 0</span><span id="lives">🐱 5</span></div>
 </div>
+<div id="combo"></div>
 <div id="boss"></div>
 <div id="toast"></div>
 

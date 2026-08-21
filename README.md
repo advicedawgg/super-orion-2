@@ -27,6 +27,10 @@ repo is the deployable artifact. Deploy with `npx wrangler deploy`.
 | P / ESC | Pause · R restart · M mute · F fullscreen |
 | O | **Sound menu** — music and effects sliders, from the title or the pause card |
 
+Grey **iron crates** only open to a ground pound. Red **TNT crates** take everything near
+them with them — including whatever was patrolling. And a **jellyfish bell** is a
+trampoline; its tentacles are not.
+
 Gamepad and touch are wired up too (Steam Deck, phone, tablet).
 
 ## The shape of it
@@ -59,6 +63,7 @@ N64 character, but crisp filtering, soft shadows and real fog.
 | `src/main.js` | Renderer, camera rig, game loop, HUD. |
 | `tools/check.js` | **The gate.** See below. |
 | `tools/vocalcheck.py` | Is anyone *singing* on a generated track? Measures it instead of guessing. |
+| `tools/roll.py` | Renders a track across several seeds, measures each, keeps the cleanest. |
 
 ## The gate
 
@@ -112,6 +117,8 @@ Typed words, anywhere in the game, the way game 1 did them:
 | `love` | hearts refilled |
 | `daddy` | a dad joke, with a rimshot |
 | `toot` | he is seven |
+| `blast` | every fuse in the level, at once |
+| `luna` | moon gravity, anywhere (not in the water) |
 
 **The trap has two halves, and both of them shipped.** A cheat's letters are still live game keys:
 
@@ -176,30 +183,59 @@ and has to be downloaded.
 **Live at [orion2.advicedawg.com](https://orion2.advicedawg.com)**, and fronted by the launcher menu at
 [orion.advicedawg.com](https://orion.advicedawg.com).
 
-Playable end to end: a **hub island** you pick levels from, **7 levels across 2 worlds, 1,089 collectable
-stars**, 4 crate types, 6 enemy types including a **boss**, moving platforms, checkpoints, lives,
-spin/ground-pound/double-jump, **swimming and a jetpack**, generated textures and a full generated
-soundtrack with real loop points.
+Playable end to end: a **hub island** you pick levels from, **10 levels across 3 worlds, 1,758
+collectable stars**, 7 crate types, 8 enemy types including a **boss**, moving platforms,
+checkpoints, lives, spin/ground-pound/double-jump, **swimming, a jetpack and low gravity**,
+generated textures and a full generated soundtrack with real loop points.
+
+Every level keeps a **best time** as well as a best star count, both shown on its placard on the
+map. Smashing crates in quick succession runs a **combo**, which is worth nothing and is the best
+part.
 
 Levels unlock in order — clear one to open the next — and everything you have cleared stays open, so
 you can go back for a better score. Your best star count per level is saved and shown on its placard.
 Running out of lives puts you back on the map rather than ending a run.
 
-| # | Level | Length | ⭐ | |
-|---|---|---|---|---|
-| 1 | Jungle Jog | 662u | 178 | |
-| 2 | Crumble Coast | 604u | 150 | |
-| 3 | Frostfizz Peaks | 623u | 180 | |
-| 4 | Crystal Cavern | 581u | 159 | |
-| 5 | Sunken Reef | 616u | 155 | **swim** |
-| 6 | Cosmic Cannonball | 649u | 181 | **jetpack** |
-| 7 | King Dad's Castle | 298u | 86 | **boss** |
+| # | Level | World | Length | ⭐ | |
+|---|---|---|---|---|---|
+| 1 | Jungle Jog | 1 | 662u | 178 | |
+| 2 | Crumble Coast | 1 | 604u | 150 | |
+| 3 | Frostfizz Peaks | 1 | 623u | 180 | |
+| 4 | Crystal Cavern | 2 | 581u | 159 | |
+| 5 | Sunken Reef | 2 | 616u | 155 | **swim** |
+| 6 | Cosmic Cannonball | 2 | 649u | 181 | **jetpack** |
+| 7 | Dust Devil Dunes | 3 | 589u | 230 | TNT · hard hats |
+| 8 | Lunar Leapfrog | 3 | 596u | 225 | **low gravity** |
+| 9 | Skyway Scramble | 3 | 612u | 214 | movers · springs |
+| 10 | King Dad's Castle | 3 | 298u | 86 | **boss** |
 
-That is 4,033 units of level, up from 358.
+That is 5,830 units of level and 1,758 stars, up from 358 units in the first draft.
 
-Crystal Cavern (2026-08-19) went in at 4 rather than on the end: the reef and the flight level are both
-free-movement levels, so back to back they left the game with no plain running level in World 2. It also
-borrows `cosmic.mp3` — it is the only level without a track of its own.
+Every level now has its own music. The five that were borrowing — the cavern, the castle and all
+three of World 3 — were generated on 2026-08-21 with MiniMax Music 3; 32 takes were screened with
+`tools/vocalcheck.py` and the cleanest kept. Only the hub still borrows (jungle), which is
+deliberate: it has never had a theme of its own.
+
+World 3 (2026-08-21) went in **before** the castle rather than after it, because the castle is the
+ending. Star counts jump in World 3 for one reason: `iron` crates are worth 3 and a `tnt` pays out
+whatever it takes with it, so a level with fuses in it is worth more than its star trails suggest.
+
+Three levels now borrow another level's track — the cavern and the moon take `cosmic.mp3`, the
+dunes take `coast.mp3` and the sky level takes `frost.mp3`. That is the single biggest thing left
+to fix, and it needs the GPU.
+
+## Level design, in numbers
+
+The three constants every level is spaced against, per mode, straight out of `tools/check.js`:
+
+| mode | single jump | double jump |
+|---|---|---|
+| running | 5.8u flat / 2.39u up | 9.2u flat / 4.08u up |
+| moon | 8.8u flat / 3.00u up | 13.9u flat / 5.12u up |
+
+Story gaps sit at 3.0–4.5u on land and 5–7u on the moon, which is roughly half the arc either way.
+The longest single gap in the game is 11u, on the moon, in Lunar Leapfrog — 79% of a double jump,
+and safe precisely because of where you are standing.
 
 ## Next
 
@@ -209,16 +245,21 @@ re-rolled, and underwater + jetpack shipped as `mode` patches on the tuning (see
 
 What is worth doing next, in rough priority order:
 
-1. **Get Orion to play it and watch where he stops.** Five levels is a lot of new geometry that has
-   only ever been proven by the checker and a scripted flythrough. The difficulty curve across the
-   five is an educated guess — and the air/fuel tank is brand new, so the reef and the flight level
-   need a real run more than anything else here.
-2. **Listen to the new tracks.** Four of the five are freshly generated. The vocal-bleed fix is
-   reasoned rather than heard — an audio model was tried and failed its control (`AGENTS.local.md`).
-   `frost.mp3` was re-rolled on 2026-08-16 (seed 4410, cfg 2.6) after three takes that sang; it now
-   measures cleaner than any other track in the game, but nobody has heard the new one yet.
-4. **Generate `cavern.mp3` and `castle.mp3`.** Two levels now borrow the flight level's track, and a boss fight wants its own more than any other level in the game. The new level borrows the flight level's track. `node tools/genmusic.js
-   `node tools/genmusic.js cavern` once ComfyUI is up, then `tools/looppoints.js`, then drop the
-   `music: 'cosmic'` line from each level def.
-5. Backdrop trees are the mesh budget: Jungle Jog draws ~1470 meshes against ~800 for the others.
-   Fine on a desktop GPU, and it is the first thing to instance if the Steam Deck struggles.
+1. **Get Orion to play World 3 and watch where he stops.** Three levels of new geometry that have
+   only ever been proven by the checker and a scripted flythrough. Two questions in particular a
+   machine cannot answer: does the moon feel *good*, or just floaty and imprecise — and is the
+   hard hat readable as "don't jump on this one" the first time he meets it, or is it three lost
+   hearts before the penny drops?
+2. **Listen to the five new tracks, and to the loop seams.** They are measured, not heard: every
+   one scores between −14.7 and −44.1 dB of vocal bleed, and their loop points come from
+   `tools/looppoints.js`, but whether any of them is any GOOD is a question no tool answers.
+   `node tools/looppoints.js --preview <name>` renders exactly what the game plays, seams and all.
+   The dunes seam has the weakest waveform correlation of the five (0.18) and is the first one to
+   check.
+3. **A theme for the hub.** It is the last thing still borrowing (jungle), and it is the screen
+   you see between every level.
+4. **Textures for the two new surfaces.** `sandstone` and `regolith` are procedural, and regolith
+   in particular took two passes to stop reading as camouflage netting. Krea 2 would do better.
+5. **Mesh budget, again.** Dust Devil Dunes draws ~1200 against ~900 for the rest — cacti, even
+   after they were halved. The backdrop pines are instanced now; cacti are the obvious next batch
+   if the Steam Deck ever struggles.

@@ -7,7 +7,7 @@
 // can't be reached. Eyeballing level geometry does not work. This does.
 
 import { LEVELS, HUB } from '../src/levels.js';
-import { buildLevel, killPlane, FLOATING, BODY, FLORA } from '../src/builder.js';
+import { buildLevel, killPlane, FLOATING, BODY, FLORA, CRATE_STARS, TNT_R } from '../src/builder.js';
 import { T, tuning, isFreeMode, hasTank } from '../src/physics.js';
 
 const SAFETY = 0.85;          // players are not frame-perfect; demand slack
@@ -121,8 +121,16 @@ for (const def of [...LEVELS, HUB]) {
   // You start floating in a swim or flight level; only a runner needs a floor.
   if (!seeds.length && !free) fail(`start ${JSON.stringify(def.start)} has no ground under it`);
 
-  /** Fraction of a's jump arc that getting to b consumes. >1 = impossible. */
-  const launchV = p => p.spring ? T.JUMP_V * 1.35 : T.JUMP_V;
+  /** How fast you leave a platform. `t.JUMP_V`, because a mode that changes
+   *  the jump changes every arc drawn from it — the moon jumps higher and much
+   *  slower than the running game, and judging it by T would fail every gap in
+   *  the level. A spring is the exception: src/world.js bounces you at a
+   *  multiple of the GLOBAL constant, so the checker must too.
+   *
+   *  Free modes are the other exception. Vertical travel there is unbounded and
+   *  the tank pass below is what actually proves the level, so their arc model
+   *  stays deliberately generous rather than pretending one stroke is a jump. */
+  const launchV = p => p.spring ? T.JUMP_V * 1.35 : (free ? T.JUMP_V : t.JUMP_V);
   function edgeRatio(a, b) {
     let best = Infinity;
     for (const fa of footprints(a)) for (const fb of footprints(b)) {
@@ -210,9 +218,10 @@ for (const def of [...LEVELS, HUB]) {
   // star trail arcing over a gap is mid-air by design.
   const canPass = (p, hr) => [...reached].some(pl => {
     const v = launchV(pl);
+    const grav = free ? T.GRAV : t.GRAV;              // see launchV
     return footprints(pl).some(f => {
       const dy = p.y - f.top - 0.9;                   // star sits ~chest height
-      if (dy > v ** 2 / (2 * T.GRAV) + H2) return false;
+      if (dy > v ** 2 / (2 * grav) + H2) return false;
       if (dy < -8) return false;                      // you'd fall straight past it
       return gapPt(p, f.r) <= reach(Math.max(0, dy), v, true) * 0.5 + hr;
     });
@@ -248,6 +257,19 @@ for (const def of [...LEVELS, HUB]) {
         && Math.abs(s.y - c.y) < 0.05;
     });
     if (!held) fail(`crate at (${c.x},${c.y},${c.z}) has nothing under it — it will fall on load`);
+    // A kind nobody implements is worth nothing, wears no stencil, and takes
+    // src/world.js down the first time you touch it (`CRATE[c.kind].spring`).
+    if (!(c.kind in CRATE_STARS)) fail(`crate at (${c.x},${c.y},${c.z}) has unknown kind '${c.kind}'`);
+  }
+
+  // A tnt crate pays out by taking its neighbours with it, so one on its own
+  // is a crate worth zero stars with a fuse drawn on it — which reads to a kid
+  // as a bug in the game rather than a decision.
+  for (const c of d.crates) {
+    if (c.kind !== 'tnt') continue;
+    const n = d.crates.filter(o => o !== c && o.kind !== 'tnt'
+      && Math.hypot(o.x - c.x, o.y - c.y, o.z - c.z) <= TNT_R).length;
+    if (!n) warn(`tnt at (${c.x},${c.y},${c.z}) has nothing in blast range — it is worth 0 stars`);
   }
 
   // Ground enemies need floor. A grumblin in mid-air is a level-design typo.
@@ -391,7 +413,7 @@ for (const def of [...LEVELS, HUB]) {
   if (worstRatio > SAFETY)
     warn(`tightest required jump eats ${(worstRatio * 100).toFixed(0)}% of the jump arc (want <${SAFETY * 100}%) — ${worstDesc}`);
 
-  const totalStars = d.stars.length + d.crates.reduce((n, c) => n + ({ plain: 1, star: 5 }[c.kind] || 0), 0);
+  const totalStars = d.stars.length + d.crates.reduce((n, c) => n + (CRATE_STARS[c.kind] || 0), 0);
   // Length is a first-class number here: "the levels are too short" was the
   // headline playtest note, and star counts alone don't answer it.
   const zs = d.solids.map(s => s.z);
