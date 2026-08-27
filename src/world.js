@@ -117,6 +117,8 @@ export class World {
     this.plant(data.trees);
     this.clouds = (data.clouds || []).map(c => this.addCloud(c));
     this.portals = (data.portals || []).map(p => this.addPortal(p));
+    this.ambient = [];
+    this.setupAmbient(def, data);
     if (this.goalPos) this.addGoal();
 
     this.totalStars = this.stars.length + this.crates.reduce((n, c) => n + (CRATE[c.kind]?.stars || 0), 0);
@@ -505,6 +507,160 @@ export class World {
     return { g, home: c.x, drift: c.drift, phase: seed % 6.28 };
   }
 
+  /* ---- atmosphere ----
+   * Things the world projects onto its own air. All of it is decorative —
+   * no collider, no gate, no state — so it rides a separate tick list and
+   * lives inside `this.group`, where dispose() already takes it with the
+   * rest of the level. Nothing here may outlive the level that made it. */
+  setupAmbient(def, data) {
+    switch (def.id) {
+      case 'frost':
+        // Snow. The one weather effect the game has, and it goes on the one
+        // level that is a snowfield without saying so.
+        this.addDrift({
+          count: 90, size: .14, color: 0xffffff,
+          fall: 1.7, sway: 1.1,
+          box: { x: 16, yTop: 15, yBot: -7, z: 12, zBack: 8 },
+        });
+        break;
+      case 'reef':
+        // Sea-motes: the water must have something in it, or it is a blue box.
+        this.addDrift({
+          count: 70, size: .09, color: 0xa8dde2,
+          fall: -0.28, sway: 0.5,
+          box: { x: 14, yTop: 13, yBot: -6, z: 11, zBack: 7 },
+        });
+        // And the surface light, twice: on the water seen from below, and on
+        // the deep sand seen through the gaps. The scroll is the only motion
+        // the sea gets, and it is what sells the water.
+        this.addCaustics(def.ceilY, data.ground?.y ?? -12);
+        break;
+      case 'cosmic':
+        this.addStarfield();
+        // The corridor walls run floor-to-sky (40u) and span the whole level,
+        // so any planet OUTSIDE them is behind the wall — the sightline from
+        // the camera crosses the wall plane at 26u, under the roof. Inside the
+        // corridor, ahead and high, it clears the flight path and hangs in the
+        // sky; gates in front of it just frame it through their windows.
+        this.addPlanet('planetBands', 16, 40, -150, 42);
+        break;
+      case 'lunar':
+        this.addStarfield();
+        // Earthrise, off to the left. The moon is not alone in the dark.
+        this.addPlanet('earth', -62, 22, -170, 22);
+        break;
+    }
+  }
+
+  /** A field of drifting bits — snow in the peaks, motes in the sea. One
+   *  InstancedMesh (the backdrop-pine precedent: a batch spanning the level
+   *  is one draw call, not ninety), inside a box that follows the player.
+   *  The box is bigger than the view on every edge, so a bit that leaves it
+   *  is off-screen when it wraps back in and nothing ever teleports.
+   *  `fall` is signed: down for snow, up for motes. */
+  addDrift({ count, size, color, fall, sway, box }) {
+    const im = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(size, size, size),
+      new THREE.MeshBasicMaterial({ color }),
+      count);
+    im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    // The batch spans the whole view by design; per-instance culling would
+    // ask the GPU to test ninety boxes for one it draws anyway.
+    im.frustumCulled = false;
+    const bits = [];
+    for (let i = 0; i < count; i++) bits.push({
+      bx: Math.random() * 2 - 1, bz: Math.random() * 2 - 1, by: Math.random(),
+      ph: Math.random() * 6.28, sp: .6 + Math.random() * .7,
+      f: (0.7 + Math.random() * .6),
+    });
+    const d = new THREE.Object3D();
+    this.group.add(im);
+    const span = box.x * 2, h = box.yTop - box.yBot;
+    this.ambient.push((dt, player) => {
+      const px = player.pos.x, py = player.pos.y, pz = player.pos.z;
+      for (let i = 0; i < count; i++) {
+        const b = bits[i];
+        b.by += -b.f * fall * dt / h;
+        if (b.by < 0) b.by += 1; else if (b.by > 1) b.by -= 1;
+        const x = px + b.bx * span * .5 + Math.sin(this.time * b.sp + b.ph) * sway;
+        const y = py + box.yBot + b.by * h;
+        const z = pz - box.z * .5 + b.bz * (box.z + box.zBack) * .5;
+        d.position.set(x, y, z);
+        d.rotation.set(this.time * b.sp, b.ph + this.time * b.sp * .7, b.ph);
+        d.updateMatrix();
+        im.setMatrixAt(i, d.matrix);
+      }
+      im.instanceMatrix.needsUpdate = true;
+    });
+  }
+
+  /** The night sky for the space levels: a dome of stars that follows the
+   *  player, over the level's flat gradient background. fog:false, because
+   *  a sky 150u out must not dissolve into the fog colour; depthWrite off,
+   *  so the level's own geometry still occludes it through the windows. */
+  addStarfield() {
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(150, 24, 16),
+      new THREE.MeshBasicMaterial({
+        map: tex('stars'), side: THREE.BackSide, transparent: true,
+        fog: false, depthWrite: false,
+      }));
+    this.group.add(dome);
+    this.ambient.push((dt, player) => {
+      dome.position.copy(player.pos);
+      dome.rotation.y += dt * .004;      // the sky turns, not the station
+    });
+  }
+
+  /** A planet on a leash: always `zOff` ahead of the player and `xOff` to the
+   *  side, at a FIXED world altitude. Leashed rather than parked — a planet
+   *  placed once in the level drifts behind the player a third of the way
+   *  through 600u of it. Altitude is world-fixed, not player-relative: a
+   *  jetpack level lets the player fly to the ceiling, and a planet that
+   *  climbs with him ends up above the roof of the corridor he is in. */
+  addPlanet(texName, xOff, worldY, zOff, r) {
+    const m = new THREE.Mesh(
+      new THREE.CircleGeometry(r, 40),
+      // Opaque, so WRITE depth: the starfield dome is depthWrite:false, and
+      // without this the dome's far wall paints over the planet's pixels.
+      new THREE.MeshBasicMaterial({ map: tex(texName), fog: false }));
+    this.group.add(m);
+    this.ambient.push((dt, player) => {
+      m.position.set(player.pos.x + xOff, worldY, player.pos.z + zOff);
+      m.lookAt(player.pos);
+    });
+  }
+
+  /** The sea's light, in two sheets: one just under the water surface (what
+   *  you see looking up) and one on the deep sand (what shows through the
+   *  gaps). Both follow the player and both scroll — the sheets are 64×44,
+   *  bigger than the view, centred slightly ahead of him, so the edges never
+   *  enter the frame. Additive over transparent: it is light, not paint. */
+  addCaustics(ceilY, floorY) {
+    const base = tex('caustics', 8);
+    const mk = (tex2, opacity) => {
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(64, 44).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({
+          map: tex2, transparent: true, opacity,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        }));
+      this.group.add(m);
+      return m;
+    };
+    const t1 = base.clone(); t1.needsUpdate = true;   // independent scroll
+    const t2 = base.clone(); t2.needsUpdate = true;   // and the floor runs the
+    const surf = mk(t1, .55);                          // other way, slower
+    const floor = mk(t2, .30);
+    this.ambient.push((dt, player) => {
+      const u = this.time * .05 % 1;
+      t1.offset.x = u; t1.offset.y = (this.time * .033) % 1;
+      t2.offset.x = (1 - (this.time * .029) % 1) % 1; t2.offset.y = (this.time * .047) % 1;
+      surf.position.set(player.pos.x, ceilY - .15, player.pos.z - 4);
+      floor.position.set(player.pos.x, floorY + .15, player.pos.z - 4);
+    });
+  }
+
   /**
    * A kelp stalk: blades stacked in NESTED groups, so one sway angle per joint
    * compounds up the plant and the tip travels furthest — a whole frond from
@@ -642,6 +798,10 @@ export class World {
     // never lines up into a pattern.
     for (const c of this.clouds)
       c.g.position.x = c.home + Math.sin(this.time * .157 + c.phase) * c.drift;
+    // Atmosphere: snow, sea-motes, caustics, the star dome. Decorative only,
+    // so it ticks here and dies with the group — it owns no collision and the
+    // gate never sees it.
+    for (const a of this.ambient) a(dt, player);
     // A crumbling gate: it sinks into its own lintel and is gone. Cheap, and
     // it reads as "that opened" from anywhere in the arena.
     for (const gt of this.gates) {

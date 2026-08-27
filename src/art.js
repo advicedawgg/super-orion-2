@@ -165,6 +165,70 @@ const RECIPES = {
         .map(k => Math.min(255, k * rim * (0.94 + 0.12 * grit(x, y))));
     });
   },
+  /* --- ambience: textures the level projects onto its own air --- */
+  // Caustics: the net of light the surface throws down through the water.
+  // It is the PRODUCT of two offset noise fields — a single field just reads
+  // as cloud mottling, and the product is what makes bright filaments.
+  // Alpha out, additive on top: it is light, not paint.
+  caustics() {
+    const a = fbm(71, 4, 7), b = fbm(83, 4, 7);
+    return paint(256, (x, y) => {
+      const v = a(x, y) * b(x + .37, y + .61);
+      const t = Math.max(0, v - .34) * 3.2;
+      return [140 + 115 * t, 40 + 215 * Math.min(1, t), 255, Math.min(1, t * 1.5) * 235];
+    });
+  },
+  // The night sky for the space levels. Equirect on the inside of a dome:
+  // sparse, most of them faint — a sky that is all bright stars is a pinball.
+  stars() {
+    const W = 1024, H = 512;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d'), r = rng(911);
+    for (let i = 0; i < 950; i++) {
+      const x = r() * W, y = r() * H, m = r();
+      const rad = m > .985 ? 2.1 : m > .93 ? 1.4 : m > .8 ? 1 : .6;
+      g.fillStyle = `rgba(255,255,255,${(0.3 + m * 0.7).toFixed(2)})`;
+      g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill();
+    }
+    // A handful of bright ones with a soft halo.
+    for (let i = 0; i < 16; i++) {
+      const x = r() * W, y = r() * H;
+      const halo = g.createRadialGradient(x, y, 0, x, y, 7);
+      halo.addColorStop(0, 'rgba(255,255,255,.9)');
+      halo.addColorStop(.3, 'rgba(205,220,255,.35)');
+      halo.addColorStop(1, 'rgba(205,220,255,0)');
+      g.fillStyle = halo; g.fillRect(x - 8, y - 8, 16, 16);
+    }
+    return cv;
+  },
+  // A banded gas giant, seen as a disc. The band boundary is bent by noise so
+  // it reads as weather rather than a zebra.
+  planetBands() {
+    const n = fbm(501, 4, 5), w = fbm(503, 4, 9);
+    const bands = [hex(0xf5d3a8), hex(0xd98c4a), hex(0xc46b3a), hex(0xf0b47e), hex(0xa85632)];
+    return paint(256, (x, y) => {
+      const wob = (w(x, y) - .5) * .5;
+      const b = (Math.sin((y * 10 + wob * 4) * Math.PI) * .5 + .5);
+      const t = (1 - b) * (bands.length - 1);
+      const i = Math.min(bands.length - 2, Math.floor(t)), f = t - i;
+      return mix(bands[i], bands[i + 1], f)
+        .map(k => Math.min(255, k * (0.92 + 0.16 * n(x + .5, y))));
+    });
+  },
+  // The Earth, for the moon. Continents where one noise clears its threshold,
+  // cloud streaks where a second one does.
+  earth() {
+    const c = fbm(601, 5, 5), m = fbm(607, 4, 9);
+    const deep = hex(0x174a9e), sea = hex(0x2a6fd4), land = hex(0x3f9e58), dry = hex(0xc9b458);
+    return paint(256, (x, y) => {
+      const v = c(x, y);
+      const base = v > .52
+        ? mix(land, dry, Math.max(0, (v - .72) * 3))
+        : mix(deep, sea, v / .52);
+      const cl = Math.min(1, Math.max(0, (m(x, y) - .58) * 2.6));
+      return mix(base, hex(0xffffff), cl);
+    });
+  },
   // --- the flight level's industrial set ---
   // Ice pads and grey rock in a space station read as a glacier someone parked
   // a gate on. These two replace them, and the light/dark split is not

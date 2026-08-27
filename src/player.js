@@ -238,6 +238,7 @@ export class Player {
     // --- integrate ---
     this.vel.y = Math.max(-t.MAXFALL, this.vel.y - t.GRAV * dt);
     const was = this.grounded;
+    const fallV = this.vel.y;
     const hitInfo = step(this.pos, this.vel, dt, solids);
     // The roof of a swim or flight level: the water surface, or the sky. Without
     // it there is nothing at all above you and the level stops being a corridor.
@@ -248,7 +249,12 @@ export class Player {
     this.poundT = Math.max(0, this.poundT - dt);
     if (this.grounded) {
       this.jumps = 0;
-      if (!was) { this.squash = Math.min(1, this.airT * 1.5); this.fire('land'); }
+      if (!was) {
+        this.squash = Math.min(1, this.airT * 1.5);
+        // How hard the landing was, for the dust. A walk-off-a-ledge is
+        // nothing; a double-jump return is a whump.
+        this.fire('land', -fallV);
+      }
       if (this.stomping) {
         this.stomping = false; this.squash = 1; this.fire('stompland');
         // The pound ENDS the moment it lands — and world.update() runs after
@@ -266,8 +272,9 @@ export class Player {
     return hitInfo;
   }
 
-  /** Overridden by main.js to route into audio/particles. */
-  fire() { }
+  /** Overridden by main.js to route into audio/particles.
+   *  `info` is event-specific: for 'land' it is the impact speed, in u/s. */
+  fire(name, info) { }
 
   hurt() {
     if (this.invuln) return false;

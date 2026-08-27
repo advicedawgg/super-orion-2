@@ -86,6 +86,12 @@ const bits = [];
 }
 let bitCursor = 0;
 const nextBit = () => bits[bitCursor = (bitCursor + 1) % bits.length];
+/** Push a packed 0xRRGGBB colour toward white by `k`. For particles that
+ *  must read on top of the surface that made them. */
+const lighten = (c, k) => {
+  const m = v => Math.round(v + (255 - v) * k);
+  return (m(c >> 16 & 255) << 16) | (m(c >> 8 & 255) << 8) | m(c & 255);
+};
 function burst(at, color, n = 10, power = 7) {
   for (let i = 0; i < n; i++) {
     const b = nextBit();
@@ -144,6 +150,22 @@ function toast(msg, tip = false) {
   toastEl.classList.toggle('tip', tip);
   toastEl.classList.add('on');
   toastT = tip ? 5 : 1.1;
+}
+
+/* ---- the intro card ----
+ * "WORLD 2 — SUNKEN REEF" on entry, and one "KING DAD" card when you reach
+ * the arena. Timed and non-blocking: the game runs under it, so a pause or a
+ * death mid-card costs nothing. */
+const introEl = $('intro');
+let introT = 0;
+function showIntro(sub, title, boss = false) {
+  introEl.querySelector('.sub').textContent = sub;
+  introEl.querySelector('.title').textContent = title;
+  introEl.classList.toggle('boss', boss);
+  introEl.classList.remove('on');
+  void introEl.offsetWidth;               // restart the entrance, mid-flight
+  introEl.classList.add('on');
+  introT = boss ? 2.6 : 2.1;
 }
 
 function show(html) { card.innerHTML = html; overlay.classList.remove('hide'); hud.hidden = true; }
@@ -327,11 +349,23 @@ for (const ev of ['pointerup', 'pointercancel']) card.addEventListener(ev, () =>
 /* ----------------------------------------------------------------- events */
 // A stroke throws a puff of bubbles as well as a sound — underwater you should
 // be able to SEE that the button did something, not just hear it.
-player.fire = name => {
+player.fire = (name, info) => {
   Sound.sfx(name);
   if (name === 'stroke') breath(14, player.pos.x, player.pos.y + 1.5, player.pos.z);
   // A ground pound is the heaviest thing Orion does. It should land like it.
   if (name === 'stompland') { shake(0.45); burst(player.pos.clone(), 0xffffff, 10, 5); }
+  // A hard landing throws up the ground it just hit — in the level's own
+  // ground colour, so it is sand on the dunes and snow on the peaks. The
+  // audio already carried this news; the eye now gets it too. Under ~9 u/s
+  // it is a walk-off-a-ledge, which is not an event.
+  if (name === 'land' && info > 9) {
+    // Lightened: the raw ground colour is green-on-green in the jungle and
+    // near-invisible on the deck. The puff must read on every surface.
+    burst(player.pos.clone().setY(player.pos.y + .15),
+      lighten(world?.splash ?? 0xcfcfcf, .45),
+      Math.round(4 + Math.min(10, info - 9)), 3 + Math.min(4, (info - 9) * .2));
+    if (info > 16) shake(.12);
+  }
 };
 
 function worldFx(name, at, info) {
@@ -440,7 +474,11 @@ function loadWorld(def) {
   snapCamera();
   Sound.playMusic(def.music || def.id);
   drawBoss();
-  if (def.hint) toast(def.hint, true);
+  // The intro card owns the centre of the screen for its 2.1s; a hint that
+  // fires at the same moment lands on top of it. Wait for the card to go.
+  if (def.hint) setTimeout(() => {
+    if (G.state === 'PLAY' || G.state === 'PAUSED') toast(def.hint, true);
+  }, 2300);
   return def;
 }
 
@@ -479,6 +517,8 @@ function enterLevel(i) {
   G.runT = 0; G.hudT = 0;
   comboN = 0; comboT = 0; comboEl.classList.remove('on');
   loadWorld(LEVELS[i]);
+  G.bossIntro = false;
+  showIntro(`WORLD ${LEVELS[i].world}`, LEVELS[i].name.toUpperCase());
   G.state = 'PLAY'; hideOverlay(); drawHUD();
 }
 
@@ -673,6 +713,7 @@ function frame(now) {
   In.update();
 
   if (toastT > 0 && (toastT -= dt) <= 0) toastEl.classList.remove('on');
+  if (introT > 0 && (introT -= dt) <= 0) introEl.classList.remove('on');
 
   switch (G.state) {
     case 'TITLE':
@@ -723,6 +764,15 @@ function frame(now) {
         breath(4, player.pos.x, player.pos.y + 1.5, player.pos.z);
       }
       if (world.update(dt, player) === 'win') { levelClear(); break; }
+      // The boss announces himself once, when you reach the arena — not on
+      // level start, which is a spoiler a third of the castle early.
+      if (!G.bossIntro) {
+        const king = world.enemies.find(e => e.kind === 'king');
+        if (king && Math.hypot(player.pos.x - king.home.x, player.pos.z - king.home.z) < king.arena + 6) {
+          G.bossIntro = true;
+          showIntro('THE LAST LEVEL', 'KING DAD', true);
+        }
+      }
       if (player.pos.y < world.killY) die(true);
       break;
     }
