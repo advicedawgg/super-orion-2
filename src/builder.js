@@ -221,8 +221,13 @@ class Builder {
    */
   tree(x, y, z, s = 1, solid = true, kind = 'pine') { this.o.trees.push({ x, y, z, s, solid, kind }); }
   /** Soft scenery — kelp, coral, a crystal cluster. Never solid, so this is
-   *  the honest spelling of it for everything that isn't a tree. */
-  weed(x, y, z, s = 1, kind = 'kelp') { this.tree(x, y, z, s, false, kind); }
+   *  the honest spelling of it for everything that isn't a tree. `back` marks
+   *  backdrop cover the player can never reach: the world bakes those into
+   *  merged static meshes (no shadows), the way backdrop pines are instanced. */
+  weed(x, y, z, s = 1, kind = 'kelp', back = false) {
+    this.tree(x, y, z, s, false, kind);
+    if (back) this.o.trees[this.o.trees.length - 1].back = true;
+  }
 }
 
 /** Run a level definition's build() and return its plain data. */

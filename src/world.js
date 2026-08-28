@@ -28,6 +28,24 @@ function tiledBox(w, h, d, scale) {
   return g;
 }
 
+/** Concatenate pre-transformed geometries into one buffer. De-indexed first,
+ *  so mixed indexed/non-indexed sources are all just triangle soup; an
+ *  attribute is kept only if every source has it, or the buffers misalign. */
+function mergeGeos(geos) {
+  const parts = geos.map(g => g.index ? g.toNonIndexed() : g);
+  const out = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal', 'uv']) {
+    if (!parts.every(g => g.attributes[name])) continue;
+    const item = parts[0].attributes[name].itemSize;
+    const total = parts.reduce((n, g) => n + g.attributes[name].count, 0);
+    const arr = new Float32Array(total * item);
+    let off = 0;
+    for (const g of parts) { arr.set(g.attributes[name].array, off); off += g.attributes[name].array.length; }
+    out.setAttribute(name, new THREE.BufferAttribute(arr, item));
+  }
+  return out;
+}
+
 const matCache = new Map();
 /** The three tiers of a pine's canopy. Shared, because the batched backdrop
  *  and a hand-placed tree have to be the same green. */
@@ -337,7 +355,9 @@ export class World {
    * Everything here is deterministic in (x,z): the same plant is the same
    * plant on every load, so a screenshot is reproducible and nothing pops.
    */
-  addTree(t) {
+  addTree(t) { this.group.add(this.buildTree(t)); }
+
+  buildTree(t) {
     const g = new THREE.Group(); g.position.set(t.x, t.y, t.z); g.scale.setScalar(t.s);
     const seed = Math.abs(t.x * 7.3 + t.z * 3.1);
     const rnd = k => ((Math.sin(seed * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1;
@@ -356,7 +376,7 @@ export class World {
     // game is a fixed rig looking up +Z, so that is +Z, not "inward toward the
     // corridor". Facing the corridor is what makes it edge-on from the camera.
     if (t.kind === 'fan') g.rotation.y = (rnd(11) - .5) * .9;
-    this.group.add(g);
+    return g;
   }
 
   /** Reef colours die in the teal fog under a dim underwater sun, so everything
@@ -376,12 +396,45 @@ export class World {
    * a real group.
    */
   plant(trees) {
-    const backdrop = [];
+    const backdrop = [], baked = [];
     for (const t of trees) {
       if (!t.solid && (t.kind || 'pine') === 'pine') backdrop.push(t);
+      else if (t.back) baked.push(t);
       else this.addTree(t);
     }
     if (backdrop.length) this.addPineBatch(backdrop);
+    if (baked.length) this.addFloraBake(baked);
+  }
+
+  /**
+   * Backdrop ground cover — the desert's valley-floor cacti and shrubs —
+   * baked into ONE static mesh per colour. Unlike the pines, these can't
+   * share an InstancedMesh per part: every cactus has its own trunk height
+   * and arm lengths, so the geometries differ per plant. Instead each plant
+   * is built by the exact code the reachable ones use (same silhouette, same
+   * deterministic seed), then its triangles are folded, pre-transformed, into
+   * one merged buffer per material colour. ~350 scenery draw calls become 3.
+   * No shadows, for the pine-batch reason: one object spanning the level is
+   * in the shadow frustum for the whole level.
+   */
+  addFloraBake(trees) {
+    const byColor = new Map();
+    for (const t of trees) {
+      const g = this.buildTree(t);
+      g.updateMatrixWorld(true);   // detached, so matrixWorld = the local chain
+      g.traverse(o => {
+        if (!o.isMesh) return;
+        const key = o.material.color.getHex();
+        let e = byColor.get(key);
+        if (!e) byColor.set(key, e = { mat: o.material, geos: [] });
+        e.geos.push(o.geometry.clone().applyMatrix4(o.matrixWorld));
+      });
+    }
+    for (const { mat, geos } of byColor.values()) {
+      const m = new THREE.Mesh(mergeGeos(geos), mat);
+      m.castShadow = false; m.receiveShadow = true;
+      this.group.add(m);
+    }
   }
 
   /**

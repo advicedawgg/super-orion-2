@@ -8,6 +8,7 @@ import * as THREE from 'three';
 // anything not listed here — the game must never need an asset file to boot.
 export const REAL = new Set([
   'grass', 'dirt', 'rock', 'sand', 'wood', 'ice', 'metal', 'water', 'crate',
+  'sandstone', 'regolith',
 ]);
 
 /* ------------------------------------------------------------------ noise */

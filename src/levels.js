@@ -1737,13 +1737,14 @@ export const LEVELS = [
       B.prop(-42 + (z % 9), -16 + h, z, 20, 26, h, 'sandstone');
       B.prop(46 + (z % 7), -16 + h * .8, z - 22, 24, 22, h * .8, 'sandstone');
     }
-    // Ground cover on the valley floor, so the drop reads as a place. Spaced
-    // at 30u rather than 17: a cactus is ten meshes and this loop runs the
-    // length of the level, which is how the desert became the most expensive
-    // thing in the game to draw.
-    for (let z = 16; z > -620; z -= 30) {
-      B.weed(-20 + (z % 11), -16, z, 1.5 + (Math.abs(z) % 5) / 5, 'cactus');
-      B.weed(24 + (z % 8), -16, z - 9, 1.2 + (Math.abs(z) % 4) / 4, 'shrub');
+    // Ground cover on the valley floor, so the drop reads as a place. Marked
+    // `back`, so the world bakes the whole run of them into a couple of merged
+    // meshes — a cactus is ten meshes and this loop runs the length of the
+    // level, which is how the desert became the most expensive thing in the
+    // game to draw. Baking it bought the spacing back down from 30u.
+    for (let z = 16; z > -620; z -= 17) {
+      B.weed(-20 + (z % 11), -16, z, 1.5 + (Math.abs(z) % 5) / 5, 'cactus', true);
+      B.weed(24 + (z % 8), -16, z - 9, 1.2 + (Math.abs(z) % 4) / 4, 'shrub', true);
     }
 
     /* --- A: the trailhead. Wide, flat, one hard hat with room ------------- */

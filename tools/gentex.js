@@ -42,6 +42,13 @@ export const TEXTURES = {
   ice:   { seed: 1106, prompt: `Pale blue glacier ice surface from directly above, glossy frozen sheet with fine internal cracks and frosted patches, cyan and white tones. ${STYLE}` },
   metal: { seed: 1107, prompt: `Brushed steel diamond-plate metal panel from directly above, raised tread pattern, cool grey and silver tones, light industrial wear. ${STYLE}` },
   water: { seed: 1108, prompt: `Tropical shallow ocean water from directly above, gentle caustic ripples, turquoise and deep teal tones, clean stylised waves. ${STYLE}` },
+  // The two World-3 surfaces. Palettes match the procedural recipes they
+  // replace (art.js sandstone/regolith), so nothing else in those levels
+  // needs re-grading: sandstone is #9c5a34→#d99b5c→#f0cf9a strata, regolith
+  // is #6a6f88→#b4b9cf dust. Sandstone keeps its horizontal banding — a mesa
+  // reads as a mesa from the strata and from nothing else.
+  sandstone: { seed: 1110, prompt: `Desert sandstone cliff with horizontal sedimentary strata, gently wavy wind-carved layered bands of warm terracotta, amber and pale cream, fine sandy grit between the layers. ${STYLE}` },
+  regolith:  { seed: 1111, prompt: `Grey moon dust regolith surface from directly above, fine powdery dust in muted cool grey-lavender tones, a few small shallow craters with softly brighter rims, scattered tiny stones. ${STYLE}` },
   // The crate maps one tile per face, so it must NOT be made seamless — it is
   // a single object texture, not a repeating surface.
   crate: {
