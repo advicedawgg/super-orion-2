@@ -182,7 +182,7 @@ export function sfx(name, arg) { SFX[name]?.(arg); }
 // rather than throwing — the game must never fail to start over a soundtrack.
 // Generated locally by tools/genmusic.js (MiniMax Music 3 on the 4090).
 export const TRACKS = new Set(['jungle', 'coast', 'frost', 'reef', 'cosmic', 'title',
-                               'cavern', 'dunes', 'lunar', 'skyway', 'castle']);
+                               'cavern', 'dunes', 'lunar', 'skyway', 'castle', 'hub']);
 
 /**
  * Play a track. Runs 0..loopEnd once — the intro — then repeats

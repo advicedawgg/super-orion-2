@@ -45,5 +45,9 @@ export const LOOPS = {
   "castle": {
     "loopStart": 15.9289,
     "loopEnd": 56.1639
+  },
+  "hub": {
+    "loopStart": 38.1272,
+    "loopEnd": 58.9278
   }
 };

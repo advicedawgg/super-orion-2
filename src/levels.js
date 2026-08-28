@@ -2677,9 +2677,6 @@ export const byId = id => LEVELS.find(l => l.id === id);
  */
 export const HUB = {
   id: 'hub', name: 'Star Island', hub: true,
-  // Borrowed until the hub gets a theme of its own; `music` overrides the
-  // usual "track is named after the level" rule.
-  music: 'jungle',
   sky: [0x4aa8ff, 0xdff1ff], fog: [0xd6ecff, 60, 230],
   sun: 0xfff4dd, sunDir: [-0.4, 1, 0.55], amb: 0x4e6a48,
   // Ten doors do not fit on one arc at a readable size, so the island grew a

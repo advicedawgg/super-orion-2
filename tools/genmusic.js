@@ -190,6 +190,26 @@ Cavernous, glittering, curious, a little bit spooky in a fun way — echoing and
 Big bold brass fanfare melody, pompous low tuba and trombone counterline, marching snare and rolling timpani, crashing orchestral hits, sweeping strings, pipe organ stabs, tubular bells.
 Grand, urgent, boisterous and funny rather than menacing — a villain who is secretly your dad. Resolves triumphantly major at the end. Family-friendly. Instrumental only — every part is played, none of it is sung. Clean loop, consistent tempo throughout.`,
   },
+  // The hub — Star Island, the calm screen between adventures, and the last
+  // track that was still borrowed (jungle's). Written to the plucked-or-struck
+  // rule from the start — and it still took twelve takes, which is worth a
+  // note because it complicates the reword-first doctrine:
+  //
+  //   this caption, six seeds:   -6.2  -6.9  -0.5  +2.2  -13.1  -8.3
+  //   reworded (toy-like village square, no ukulele, no "cosy"), six seeds:
+  //                              -2.5  +3.3  (-18.4 but 29.6s, a stub)  +0.1  -2.8  -0.5
+  //
+  // The rework was WORSE on five of six seeds — including seed 7412, which
+  // scored -13.1 here and -2.8 there. So a reword is an experiment, not a
+  // spell: measure it against the pinned caption before believing it. The
+  // shipped take is 7412 from this caption, -13.1 dB — under dunes' old
+  // -10.1, and attenuated -2.83 dB to -14.3 LUFS like everything else.
+  hub: {
+    seconds: 90, seed: 7412, cfg: 2.6,
+    caption: `Global Metadata: Gentle home-island map theme for a children's platformer, the calm screen between adventures. 100 BPM, G major. Purely instrumental. No vocals, no singing, no voice, no choir, no humming, no vocal pads, no synth pads.
+Warm ukulele picking a simple friendly melody, music box and glockenspiel answering it, plucked harp, soft shaker and light hand percussion, round upright bass, occasional bright flute phrase.
+Cosy, welcoming, unhurried — the feeling of being safely home and choosing where to go next. Every part is plucked, struck or blown, nothing sustained or washy. Family-friendly. Strong memorable melody. Instrumental only — none of it is sung. Clean loop, consistent tempo throughout.`,
+  },
   title: {
     seconds: 70, seed: 5150, structure: WORDED,   // as shipped; see jungle
     caption: `Global Metadata: Heroic cosmic main-theme fanfare for a children's space platformer. 120 BPM, D major. Instrumental, no vocals, no singing.
