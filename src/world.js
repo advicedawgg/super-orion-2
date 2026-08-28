@@ -554,9 +554,12 @@ export class World {
 
   /** A field of drifting bits — snow in the peaks, motes in the sea. One
    *  InstancedMesh (the backdrop-pine precedent: a batch spanning the level
-   *  is one draw call, not ninety), inside a box that follows the player.
-   *  The box is bigger than the view on every edge, so a bit that leaves it
-   *  is off-screen when it wraps back in and nothing ever teleports.
+   *  is one draw call, not ninety). The bits live in WORLD space and each is
+   *  wrapped, modulo the box, into a window around the player — so walking
+   *  through the field streams it past you instead of dragging it along
+   *  (player-relative offsets made the snow a halo stuck to Orion). The box
+   *  is bigger than the view on every edge, so a bit that wraps re-enters
+   *  off-screen and nothing ever visibly teleports.
    *  `fall` is signed: down for snow, up for motes. */
   addDrift({ count, size, color, fall, sway, box }) {
     const im = new THREE.InstancedMesh(
@@ -567,24 +570,29 @@ export class World {
     // The batch spans the whole view by design; per-instance culling would
     // ask the GPU to test ninety boxes for one it draws anyway.
     im.frustumCulled = false;
+    const span = box.x * 2, h = box.yTop - box.yBot;
+    const zSpan = box.z + box.zBack, yMid = (box.yTop + box.yBot) * .5;
     const bits = [];
     for (let i = 0; i < count; i++) bits.push({
-      bx: Math.random() * 2 - 1, bz: Math.random() * 2 - 1, by: Math.random(),
+      wx: (Math.random() * 2 - 1) * box.x, wz: (Math.random() * 2 - 1) * box.x,
+      wy: Math.random() * h,
       ph: Math.random() * 6.28, sp: .6 + Math.random() * .7,
       f: (0.7 + Math.random() * .6),
     });
     const d = new THREE.Object3D();
     this.group.add(im);
-    const span = box.x * 2, h = box.yTop - box.yBot;
+    // Fold a world coordinate into the span-wide window centred on c. The
+    // extra 1.5*s keeps the inner modulo's argument positive for any drift
+    // of any age at any distance from the spawn.
+    const wrap = (v, c, s) => c + (((v - c) % s + s * 1.5) % s) - s * .5;
     this.ambient.push((dt, player) => {
       const px = player.pos.x, py = player.pos.y, pz = player.pos.z;
       for (let i = 0; i < count; i++) {
         const b = bits[i];
-        b.by += -b.f * fall * dt / h;
-        if (b.by < 0) b.by += 1; else if (b.by > 1) b.by -= 1;
-        const x = px + b.bx * span * .5 + Math.sin(this.time * b.sp + b.ph) * sway;
-        const y = py + box.yBot + b.by * h;
-        const z = pz - box.z * .5 + b.bz * (box.z + box.zBack) * .5;
+        b.wy -= b.f * fall * dt;
+        const x = wrap(b.wx + Math.sin(this.time * b.sp + b.ph) * sway, px, span);
+        const y = wrap(b.wy, py + yMid, h);
+        const z = wrap(b.wz, pz - box.z * .5, zSpan);
         d.position.set(x, y, z);
         d.rotation.set(this.time * b.sp, b.ph + this.time * b.sp * .7, b.ph);
         d.updateMatrix();
@@ -653,11 +661,15 @@ export class World {
     const surf = mk(t1, .55);                          // other way, slower
     const floor = mk(t2, .30);
     this.ambient.push((dt, player) => {
-      const u = this.time * .05 % 1;
-      t1.offset.x = u; t1.offset.y = (this.time * .033) % 1;
-      t2.offset.x = (1 - (this.time * .029) % 1) % 1; t2.offset.y = (this.time * .047) % 1;
-      surf.position.set(player.pos.x, ceilY - .15, player.pos.z - 4);
-      floor.position.set(player.pos.x, floorY + .15, player.pos.z - 4);
+      // The sheets ride along with the player, so the texture offset must
+      // pay that motion back or the dapple is glued to him: +x/8 in u (8
+      // tiles across 64u) and -z*8/44 in v (v runs toward -z after the
+      // rotateX). What remains is the time scroll — light over a still sea.
+      const cx = player.pos.x, cz = player.pos.z - 4;
+      t1.offset.x = cx / 8 + this.time * .05; t1.offset.y = -cz * 8 / 44 + this.time * .033;
+      t2.offset.x = cx / 8 - this.time * .029; t2.offset.y = -cz * 8 / 44 + this.time * .047;
+      surf.position.set(cx, ceilY - .15, cz);
+      floor.position.set(cx, floorY + .15, cz);
     });
   }
 

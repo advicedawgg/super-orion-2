@@ -22,8 +22,12 @@
   #hearts{display:flex;gap:.55em;align-items:center}
   #hearts span{filter:drop-shadow(0 2px 0 rgba(0,0,0,.4))}
   #hearts span.gone{opacity:.22;filter:grayscale(1)}
-  /* Air (reef) / fuel (cosmic). Only shown in a mode that meters lift. */
-  #tank{display:none;width:clamp(64px,13vmin,150px);height:.55em;border-radius:.3em;
+  /* Air (reef) / fuel (cosmic). Only shown in a mode that meters lift — and
+     it hovers just over Orion's head, not in the HUD corner: in a free mode
+     your eyes are on him, and a gauge you have to glance away for is a gauge
+     you read too late. drawTank() parks it in screen space every frame. */
+  #tank{display:none;position:fixed;left:0;top:0;width:clamp(56px,9vmin,110px);height:.5em;
+        border-radius:.3em;pointer-events:none;
         background:rgba(0,0,0,.42);box-shadow:0 0 0 .12em rgba(0,0,0,.45)}
   #tank.on{display:block}
   #tank i{display:block;height:100%;border-radius:.3em;background:var(--cool);

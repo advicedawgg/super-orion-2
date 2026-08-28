@@ -230,9 +230,19 @@ function drawBoss(hp) {
 // Air / fuel. Only shown in a mode that meters lift, because in every other
 // mode it is pinned full and a permanently-full bar is just noise.
 const tankEl = $('tank'), tankBar = tankEl.querySelector('i');
+const tankV = new THREE.Vector3();
 function drawTank() {
   tankBar.style.transform = `scaleX(${player.tank})`;
   tankEl.classList.toggle('low', player.tank < 0.3);
+  // Park the bar just over Orion's head. updateMatrixWorld is the Camera
+  // override, so it also refreshes matrixWorldInverse — without it the
+  // projection is a frame stale, and on loadWorld it is arbitrarily stale.
+  cam.updateMatrixWorld();
+  tankV.copy(player.pos); tankV.y += 2.8;
+  tankV.project(cam);
+  tankEl.style.transform =
+    `translate(${((tankV.x * .5 + .5) * innerWidth).toFixed(1)}px,` +
+    `${((.5 - tankV.y * .5) * innerHeight).toFixed(1)}px) translateX(-50%)`;
 }
 
 // ↓ means something different depending on where you are, so the card has to
@@ -472,6 +482,7 @@ function loadWorld(def) {
   G.runStars = 0;
   player.reset(G.spawn);
   snapCamera();
+  if (player.metered) drawTank();   // park the bar before the first PLAY frame
   Sound.playMusic(def.music || def.id);
   drawBoss();
   // The intro card owns the centre of the screen for its 2.1s; a hint that
@@ -526,6 +537,7 @@ function respawn() {
   G.hearts = 3;
   player.reset(G.spawn);
   snapCamera();
+  if (player.metered) drawTank();
   G.state = 'PLAY';
   drawHUD();
 }
